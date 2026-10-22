@@ -1,0 +1,16 @@
+name: Feature
+description: Ideia ou funcionalidade nova
+labels: [enhancement]
+body:
+  - type: textarea
+    id: o-que
+    attributes:
+      label: O que
+    validations:
+      required: true
+  - type: textarea
+    id: por-que
+    attributes:
+      label: Por quê
+    validations:
+      required: true

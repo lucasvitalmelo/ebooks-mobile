@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      expo:
+        patterns:
+          [
+            'expo',
+            'expo-*',
+            'react-native',
+            'react-native-*',
+            'react',
+            'react-dom',
+            '@types/react',
+            'jest-expo',
+            'eslint-config-expo',
+            'typescript',
+          ]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly

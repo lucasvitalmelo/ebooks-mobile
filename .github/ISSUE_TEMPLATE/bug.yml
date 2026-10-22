@@ -1,0 +1,30 @@
+name: Bug
+description: Bug que já está em develop ou main
+labels: [bug]
+body:
+  - type: textarea
+    id: o-que
+    attributes:
+      label: O que acontece
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Como reproduzir
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que deveria acontecer
+    validations:
+      required: true
+  - type: input
+    id: onde
+    attributes:
+      label: Onde
+      description: Branch ou versão, aparelho e versão do Android
+    validations:
+      required: true

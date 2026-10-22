@@ -21,3 +21,4 @@ App Expo com Expo Router. Duas telas no MVP: Biblioteca (`src/app/index.tsx`) e 
 - **PR de release mergeado por admin dentro do PR**: PRs abertos pelo `GITHUB_TOKEN` não disparam o CI, então o check obrigatório nunca rodaria nele; o bypass do ruleset permite o merge sem abrir mão da recusa a push direto.
 - **Build do APK no mesmo workflow do release-please**: a Release criada pelo `GITHUB_TOKEN` não dispara outro workflow.
 - **`versionCode` remoto no EAS**: evita commitar contador de build; a versão visível vem do release-please.
+- **Dependabot ignora os pacotes do SDK do Expo** (expo, react, react-native, typescript, eslint, jest e relacionados) e saltos major nos demais: esses pacotes precisam das versões que o SDK fixa, e atualizados sozinhos quebram o lint e o `expo-doctor` (#7). Sobem juntos, à mão, com `npx expo install --fix` na troca de SDK.

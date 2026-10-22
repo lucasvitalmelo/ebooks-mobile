@@ -1,0 +1,9 @@
+node_modules
+.expo
+dist
+android
+ios
+CHANGELOG.md
+package-lock.json
+app.json
+.release-please-manifest.json

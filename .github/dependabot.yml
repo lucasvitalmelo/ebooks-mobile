@@ -5,21 +5,23 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-    groups:
-      expo:
-        patterns:
-          [
-            'expo',
-            'expo-*',
-            'react-native',
-            'react-native-*',
-            'react',
-            'react-dom',
-            '@types/react',
-            'jest-expo',
-            'eslint-config-expo',
-            'typescript',
-          ]
+    # Pacotes atrelados ao SDK do Expo só sobem junto com ele (npx expo install --fix).
+    ignore:
+      - dependency-name: 'expo'
+      - dependency-name: 'expo-*'
+      - dependency-name: 'react'
+      - dependency-name: 'react-dom'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-native-*'
+      - dependency-name: '@types/react'
+      - dependency-name: 'typescript'
+      - dependency-name: 'eslint'
+      - dependency-name: 'eslint-config-expo'
+      - dependency-name: 'jest'
+      - dependency-name: 'jest-expo'
+      - dependency-name: '@types/jest'
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop

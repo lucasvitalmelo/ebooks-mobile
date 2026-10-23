@@ -8,9 +8,13 @@ import { listBooks, type Book } from '@/lib/db/books'
 import { useDb } from '@/lib/db/provider'
 import { deleteFiles, discardPicked, fileAt, readBytes, storeBook, storeCover } from '@/lib/files'
 import { formatSummary, importBooks, removeBook, type ImportDeps } from '@/lib/import'
+import { chromeFor } from '@/lib/tone'
+import { useThemeStore } from '@/store/theme-store'
 
 export default function Library() {
   const db = useDb()
+  const theme = useThemeStore((s) => s.active)
+  const chrome = chromeFor(theme.background)
   const [books, setBooks] = useState<Book[] | null>(null)
   const [importing, setImporting] = useState(false)
   const busy = useRef(false)
@@ -70,16 +74,22 @@ export default function Library() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>E-books</Text>
-        <Pressable onPress={onImport} disabled={importing} style={styles.button}>
-          {importing ? <ActivityIndicator /> : <Text style={styles.buttonText}>Importar</Text>}
+        <Text style={[styles.title, { color: chrome.text }]}>E-books</Text>
+        <Pressable onPress={onImport} disabled={importing} style={[styles.button, { backgroundColor: chrome.control }]}>
+          {importing ? (
+            <ActivityIndicator color={chrome.text} />
+          ) : (
+            <Text style={[styles.buttonText, { color: chrome.text }]}>Importar</Text>
+          )}
         </Pressable>
       </View>
       {books?.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Nenhum livro ainda. Toque em Importar para escolher um .epub.</Text>
+          <Text style={[styles.emptyText, { color: chrome.muted }]}>
+            Nenhum livro ainda. Toque em Importar para escolher um .epub.
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -91,6 +101,7 @@ export default function Library() {
             <BookCard
               book={item}
               coverUri={item.coverPath ? fileAt(item.coverPath).uri : null}
+              colors={{ text: chrome.text, muted: chrome.muted, placeholder: chrome.placeholder }}
               onPress={() => router.push(`/book/${item.id}`)}
               onLongPress={() => onRemove(item)}
             />
@@ -102,19 +113,18 @@ export default function Library() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' },
+  screen: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   title: { fontSize: 24, fontWeight: '600' },
   button: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#f0e6ff',
     minWidth: 96,
     alignItems: 'center',
   },
-  buttonText: { fontWeight: '600', color: '#4b2a8a' },
+  buttonText: { fontWeight: '600' },
   grid: { paddingHorizontal: 8 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyText: { textAlign: 'center', color: '#666' },
+  emptyText: { textAlign: 'center' },
 })

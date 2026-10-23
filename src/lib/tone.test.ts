@@ -20,3 +20,8 @@ test('chromeFor escolhe barra e texto legíveis', () => {
   expect(chromeFor('#1a1a1f')).toMatchObject({ statusBar: 'light', text: '#f4f4f5' })
   expect(chromeFor('#ffffff')).toMatchObject({ statusBar: 'dark', text: '#1f1f1f' })
 })
+
+test('chromeFor traz cor secundária e de capa vazia para os dois tons', () => {
+  expect(chromeFor('#1a1a1f')).toMatchObject({ muted: '#a1a1aa', placeholder: 'rgba(255,255,255,0.08)' })
+  expect(chromeFor('#ffffff')).toMatchObject({ muted: '#666666', placeholder: '#eeeeee' })
+})

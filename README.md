@@ -23,12 +23,13 @@ npm run format:check   # Prettier (só confere; roda no CI)
 
 ## Fluxo de trabalho
 
-Branches `main` (releases) e `develop` (integração); features em `feat/<nome>` saindo de `develop`, correções em `fix/<issue>-<nome>`. Tudo entra por PR com merge commit e CI verde. Releases pelo release-please, com o APK anexado na Release. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md); arquitetura em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Branches `main` (releases) e `develop` (integração); features em `feat/<nome>` saindo de `develop`, bugs com issue podem ser corrigidos no PR da próxima feature (`Closes #N`). Tudo entra por PR com merge commit e CI verde. Releases pelo release-please, com o APK anexado na Release. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md); arquitetura em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
 - [x] MVP: importar EPUB, biblioteca, leitor, progresso, temas
-- [ ] Grifos e seleção de texto
+- [x] Sumário e navegação por capítulos
+- [x] Grifos e seleção de texto
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)
 - [ ] iOS

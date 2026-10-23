@@ -29,6 +29,7 @@ Branches `main` (releases) e `develop` (integração); features em `feat/<nome>`
 
 - [x] MVP: importar EPUB, biblioteca, leitor, progresso, temas
 - [x] Sumário e navegação por capítulos
+- [x] Visual do leitor web e ponto de retorno
 - [x] Grifos e seleção de texto
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)

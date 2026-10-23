@@ -40,3 +40,12 @@ export async function saveLocations(db: Db, id: string, locations: string): Prom
 export async function deleteBook(db: Db, id: string): Promise<void> {
   await db.run('DELETE FROM books WHERE id = ?', [id])
 }
+
+export type BookWithProgress = Book & { percent: number | null }
+
+export function listBooksWithProgress(db: Db): Promise<BookWithProgress[]> {
+  return db.getAll<BookWithProgress>(
+    `SELECT b.*, p.percent AS percent FROM books b LEFT JOIN progress p ON p.bookId = b.id
+     ORDER BY b.lastOpenedAt IS NULL, b.lastOpenedAt DESC, b.addedAt DESC`,
+  )
+}

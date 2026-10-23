@@ -1,6 +1,6 @@
 import type { Db } from './db'
 
-export type SettingKey = 'activeThemeId'
+export type SettingKey = 'activeThemeId' | 'keepAwake'
 
 export async function getSetting(db: Db, key: SettingKey): Promise<string | null> {
   const row = await db.getFirst<{ value: string }>('SELECT value FROM settings WHERE key = ?', [key])

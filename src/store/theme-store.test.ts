@@ -126,3 +126,13 @@ test('adjust respeita passo e limites', () => {
   expect(adjust(1.2, -1, LIMITS.lineHeight)).toBe(1.2)
   expect(adjust(24, -1, LIMITS.margin)).toBe(20)
 })
+
+test('tela acesa começa desligada, grava e recarrega', async () => {
+  const { db, store } = await setup()
+  expect(store.getState().keepAwake).toBe(false)
+  await store.getState().setKeepAwake(db, true)
+  expect(store.getState().keepAwake).toBe(true)
+  const again = createThemeStore(() => 1)
+  await again.getState().load(db)
+  expect(again.getState().keepAwake).toBe(true)
+})

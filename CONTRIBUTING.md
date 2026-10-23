@@ -32,6 +32,8 @@ Tipos: `feat`, `fix`, `docs`, `style`, `refactor`, `chore`, `test`. Mudanças de
 
 O PR de release é aberto pelo bot do GitHub Actions, e PRs do bot não disparam o CI; por isso o check obrigatório nunca roda nele e ele é mergeado por um admin (`gh pr merge <n> --merge --admin`). O ruleset deixa o admin passar por cima das regras **só dentro de um PR** (bypass `pull_request`), então push direto continua recusado. O conteúdo do PR de release é só versão e changelog.
 
+**Título do PR sem prefixo de tipo**: uma frase comum em português ("Banco SQLite com migrações e repositórios"), não `feat(db): ...`. O GitHub copia o título do PR para a mensagem do merge commit, e um título no formato Conventional Commits faria o release-please contar o PR como mais um commit, duplicando o CHANGELOG. Os commits dentro do PR continuam em Conventional Commits.
+
 ## Testes
 
 A suite fica sempre verde: nenhum PR entra com teste, lint, types ou formatação quebrados. Testes cobrem lógica pura, banco e protocolo do leitor; o que depende do aparelho se verifica no emulador ou no celular.

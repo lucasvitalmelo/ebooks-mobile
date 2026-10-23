@@ -1,8 +1,11 @@
 import ePub, { EpubCFI, type Book, type Contents, type Location, type Rendition } from 'epubjs'
 import { classifyGesture, type Gesture } from '../../src/reader/gestures'
-import { Assembler, isExternalUrl, parseCommand, type Command, type ReaderEvent } from '../../src/reader/protocol'
+import { hitHighlight } from '../../src/reader/hit'
+import { resolveLink } from '../../src/reader/links'
+import { Assembler, parseCommand, type Command, type HighlightRef, type ReaderEvent } from '../../src/reader/protocol'
 import type { ReaderTheme } from '../../src/reader/theme'
 import { themeCss } from '../../src/reader/theme-css'
+import { flattenToc } from '../../src/reader/toc'
 import fontsCss from './fonts.css?inline'
 
 declare global {
@@ -31,6 +34,11 @@ let canPage = false
 let anchor: string | null = null
 // Enquanto > 0 a tela está sendo reposicionada: os relocated não são do leitor.
 let settling = 0
+// id → cfiRange dos grifos do livro aberto. O epub.js guarda as anotações e as
+// desenha em cada capítulo que abre; este mapa serve para acertar toques.
+const highlights = new Map<string, string>()
+let selectionSent = false
+const HIGHLIGHT_STYLE = { fill: '#f5c400', 'fill-opacity': '0.35' }
 
 function send(event: ReaderEvent) {
   window.ReactNativeWebView?.postMessage(JSON.stringify(event))
@@ -41,7 +49,8 @@ function percentOf(cfi: string): number | null {
 }
 
 function sendPosition(cfi: string) {
-  send({ type: 'relocated', cfi, percent: percentOf(cfi) })
+  const href = rendition ? (currentLocationOf(rendition)?.start?.href ?? null) : null
+  send({ type: 'relocated', cfi, percent: percentOf(cfi), href })
 }
 
 function withTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
@@ -193,13 +202,22 @@ function act(gesture: Gesture) {
 
 // offsetX leva a posição do toque para a tela: no iframe do capítulo, clientX é
 // relativo a ele, que no modo paginado é bem mais largo que a tela e fica deslocado.
-function registerGestures(doc: Document, offsetX: () => number) {
-  let start: { x: number; y: number; time: number } | null = null
+// hitTest: qual grifo está sob o toque (só nos capítulos; na margem não há grifo).
+function registerGestures(doc: Document, offsetX: () => number, hitTest?: (x: number, y: number) => string | null) {
+  let start: { x: number; y: number; time: number; hadSelection: boolean } | null = null
   doc.addEventListener(
     'touchstart',
     (event) => {
       const touch = event.touches[0]
-      start = event.touches.length === 1 ? { x: touch.clientX, y: touch.clientY, time: Date.now() } : null
+      start =
+        event.touches.length === 1
+          ? {
+              x: touch.clientX,
+              y: touch.clientY,
+              time: Date.now(),
+              hadSelection: selectionSent || !(doc.getSelection()?.isCollapsed ?? true),
+            }
+          : null
     },
     { passive: true },
   )
@@ -208,30 +226,75 @@ function registerGestures(doc: Document, offsetX: () => number) {
     const from = start
     start = null
     if (!from || !touch) return
+    // Com seleção na tela, o toque só a desfaz (o sistema já cuida disso).
+    if (from.hadSelection) return
     if ((event.target as Element | null)?.closest?.('a')) return
-    act(
-      classifyGesture({
-        dx: touch.clientX - from.x,
-        dy: touch.clientY - from.y,
-        x: offsetX() + touch.clientX,
-        width: window.innerWidth,
-        duration: Date.now() - from.time,
-      }),
-    )
+    const move = {
+      dx: touch.clientX - from.x,
+      dy: touch.clientY - from.y,
+      width: window.innerWidth,
+      duration: Date.now() - from.time,
+    }
+    const gesture = classifyGesture({ ...move, x: offsetX() + touch.clientX })
+    // Toque nas bordas também vira página; reclassificado no centro, só um toque
+    // de verdade (nem arrasto nem toque longo) acerta o grifo, em qualquer lugar da tela.
+    if (classifyGesture({ ...move, x: window.innerWidth / 2 }) === 'centerTap') {
+      const id = hitTest?.(touch.clientX, touch.clientY)
+      if (id) return send({ type: 'highlightTap', id })
+    }
+    act(gesture)
   })
 }
 
-// Links externos abrem fora do app; os internos (notas, sumário) seguem com o epub.js.
-// onclick, não listener: substitui o que o epub.js pôs no link.
-function handleExternalLinks(doc: Document) {
-  for (const link of doc.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-    const href = link.getAttribute('href') ?? ''
-    if (!isExternalUrl(href)) continue
-    link.onclick = (event) => {
-      event.preventDefault()
-      send({ type: 'openExternal', url: href })
-      return false
+// O iframe do epub.js não tem allow-scripts: nele o Chromium não roda nenhum onclick
+// (nem o do epub.js, que seguia os links internos), mas roda listeners. Cancelar a
+// navegação padrão evita o iframe sair do livro.
+function handleLinks(doc: Document, contents: Contents, opened: Book) {
+  doc.addEventListener('click', (event) => {
+    const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+    if (!link) return
+    event.preventDefault()
+    const sectionPath =
+      opened.spine.get(contents.sectionIndex)?.url ?? doc.querySelector('base')?.getAttribute('href') ?? ''
+    const target = resolveLink(link.getAttribute('href') ?? '', sectionPath)
+    if (!target) return
+    if (target.kind === 'external') send({ type: 'openExternal', url: target.url })
+    else void goTo(opened.path.relative(target.path) + target.hash)
+  })
+}
+
+// Os grifos deste capítulo com os retângulos na tela do iframe (mesmas coordenadas do toque).
+function highlightsIn(contents: Contents) {
+  const items: { id: string; rects: DOMRect[] }[] = []
+  for (const [id, cfiRange] of highlights) {
+    try {
+      if (new EpubCFI(cfiRange).spinePos !== contents.sectionIndex) continue
+      items.push({ id, rects: Array.from(contents.range(cfiRange).getClientRects()) })
+    } catch {
+      // CFI que não resolve neste capítulo: só não dá para tocar nele.
     }
+  }
+  return items
+}
+
+function watchSelection(doc: Document) {
+  doc.addEventListener('selectionchange', () => {
+    if (!selectionSent || !(doc.getSelection()?.isCollapsed ?? true)) return
+    selectionSent = false
+    send({ type: 'selection', cfiRange: null, text: '' })
+  })
+}
+
+function drawHighlight(r: Rendition, id: string, cfiRange: string) {
+  highlights.set(id, cfiRange)
+  r.annotations.highlight(cfiRange, { id }, () => {}, 'ebooks-highlight', HIGHLIGHT_STYLE)
+}
+
+function clearSelection() {
+  if (rendition) for (const contents of contentsOf(rendition)) contents.window?.getSelection()?.removeAllRanges()
+  if (selectionSent) {
+    selectionSent = false
+    send({ type: 'selection', cfiRange: null, text: '' })
   }
 }
 
@@ -256,13 +319,15 @@ async function generateLocations(target: Book, buffer: ArrayBuffer) {
   if (anchor) sendPosition(anchor)
 }
 
-async function open(base64: string, cfi: string | null, savedLocations: string | null) {
+async function open(base64: string, cfi: string | null, savedLocations: string | null, refs: HighlightRef[]) {
   book?.destroy()
   book = null
   rendition = null
   canPage = false
   locationsReady = false
   anchor = cfi
+  highlights.clear()
+  selectionSent = false
   const buffer = base64ToArrayBuffer(base64)
   const opened = ePub(buffer)
   book = opened
@@ -292,10 +357,12 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
     const doc = contents.document
     contents.addStylesheetCss(fontsCss, 'reader-fonts')
     injectTheme(contents)
-    handleExternalLinks(doc)
+    handleLinks(doc, contents, opened)
+    watchSelection(doc)
     registerGestures(
       doc,
       () => (doc.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect().left ?? 0,
+      (x, y) => hitHighlight(x, y, highlightsIn(contents)),
     )
     // Fonte que chega depois do layout muda o número de páginas, e o epub.js
     // 0.3.93 não percebe: resizeCheck remede e a âncora é reencontrada, mas só se
@@ -319,6 +386,11 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
     sendPosition(anchor)
   })
   current.on('resized', resettle)
+  current.on('selected', (cfiRange: string, contents: Contents) => {
+    selectionSent = true
+    send({ type: 'selection', cfiRange, text: contents.range(cfiRange).toString() })
+  })
+  for (const { id, cfiRange } of refs) drawHighlight(current, id, cfiRange)
   if (theme) applyTheme(theme)
 
   settling++
@@ -343,36 +415,59 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
   canPage = true
   anchor ??= currentLocationOf(current)?.start?.cfi ?? null
   if (anchor) sendPosition(anchor)
+  opened.loaded.navigation
+    .then((navigation) => send({ type: 'toc', entries: flattenToc(navigation.toc) }))
+    .catch((error: unknown) => {
+      console.error('Sumário ilegível', error)
+      send({ type: 'toc', entries: [] })
+    })
   if (!locationsReady) generateLocations(opened, buffer).catch(console.error)
 }
 
-async function goTo(cfi: string) {
+async function goTo(target: string) {
   const r = rendition
   if (!r || !canPage) return
-  anchor = cfi
+  const isCfi = target.startsWith('epubcfi(')
+  anchor = isCfi ? target : null
   settling++
   try {
-    await r.display(cfi)
-    await settleAt(r, cfi)
+    await r.display(target)
+    if (isCfi) await settleAt(r, target)
+    else {
+      await waitForFonts(r)
+      await nextFrames(3)
+      anchor = currentLocationOf(r)?.start?.cfi ?? null
+    }
   } finally {
     settling--
   }
-  sendPosition(cfi)
+  if (anchor) sendPosition(anchor)
 }
 
 async function handle(command: Command) {
   switch (command.type) {
     case 'open':
-      return open(command.base64, command.cfi, command.locations)
+      return open(command.base64, command.cfi, command.locations, command.highlights)
     case 'next':
       return canPage ? rendition?.next() : undefined
     case 'prev':
       return canPage ? rendition?.prev() : undefined
     case 'goTo':
-      return goTo(command.cfi)
+      return goTo(command.target)
     case 'setTheme':
       theme = command.theme
-      applyTheme(theme)
+      return applyTheme(theme)
+    case 'addHighlight':
+      if (rendition) drawHighlight(rendition, command.id, command.cfiRange)
+      return clearSelection()
+    case 'removeHighlight': {
+      const cfiRange = highlights.get(command.id)
+      highlights.delete(command.id)
+      if (cfiRange) rendition?.annotations.remove(cfiRange, 'highlight')
+      return
+    }
+    case 'clearSelection':
+      return clearSelection()
   }
 }
 

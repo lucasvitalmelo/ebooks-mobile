@@ -1,4 +1,5 @@
 import { isFontId } from './fonts'
+import type { Rect } from './hit'
 import type { ReaderTheme } from './theme'
 
 import type { TocEntry } from './toc'
@@ -21,13 +22,23 @@ export type Command =
 
 export type ReaderEvent =
   | { type: 'ready' }
-  | { type: 'relocated'; cfi: string; percent: number | null; href: string | null }
+  | {
+      type: 'relocated'
+      cfi: string
+      percent: number | null
+      href: string | null
+      // Começo e fim da página na tela; `cfi` é a âncora, que pode estar no meio dela.
+      startCfi: string | null
+      endCfi: string | null
+    }
   | { type: 'locations'; data: string }
   | { type: 'centerTap' }
   | { type: 'openExternal'; url: string }
   | { type: 'toc'; entries: TocEntry[] }
-  | { type: 'selection'; cfiRange: string | null; text: string }
-  | { type: 'highlightTap'; id: string }
+  | { type: 'selection'; cfiRange: string | null; text: string; rect: Rect | null }
+  | { type: 'highlightTap'; id: string; rect: Rect }
+  | { type: 'linkJump' }
+  | { type: 'jumpEnded'; ok: boolean }
   | { type: 'error'; message: string }
 
 type Fields = Record<string, unknown>
@@ -36,6 +47,13 @@ const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const isInteger = (value: unknown): value is number => Number.isInteger(value)
 const isNullableString = (value: unknown): value is string | null => value === null || isString(value)
+
+function isRect(value: unknown): value is Rect {
+  if (!value || typeof value !== 'object') return false
+  const r = value as Fields
+  return isNumber(r.left) && isNumber(r.top) && isNumber(r.right) && isNumber(r.bottom)
+}
+const pickRect = ({ left, top, right, bottom }: Rect): Rect => ({ left, top, right, bottom })
 
 // Só o que faz sentido abrir fora do app; nada de javascript:, file: ou links internos do livro.
 export function isExternalUrl(url: string): boolean {
@@ -132,13 +150,18 @@ export function parseEvent(raw: string): ReaderEvent | null {
   switch (m.type) {
     case 'ready':
     case 'centerTap':
+    case 'linkJump':
       return { type: m.type }
     case 'relocated':
       return isString(m.cfi) &&
         (m.percent === null || (isNumber(m.percent) && m.percent >= 0 && m.percent <= 1)) &&
-        isNullableString(m.href)
-        ? { type: 'relocated', cfi: m.cfi, percent: m.percent, href: m.href }
+        isNullableString(m.href) &&
+        isNullableString(m.startCfi) &&
+        isNullableString(m.endCfi)
+        ? { type: 'relocated', cfi: m.cfi, percent: m.percent, href: m.href, startCfi: m.startCfi, endCfi: m.endCfi }
         : null
+    case 'jumpEnded':
+      return typeof m.ok === 'boolean' ? { type: 'jumpEnded', ok: m.ok } : null
     case 'locations':
       return isString(m.data) ? { type: 'locations', data: m.data } : null
     case 'openExternal':
@@ -148,11 +171,11 @@ export function parseEvent(raw: string): ReaderEvent | null {
         ? { type: 'toc', entries: m.entries.map(({ label, href, depth }) => ({ label, href, depth })) }
         : null
     case 'selection':
-      return isNullableString(m.cfiRange) && isString(m.text)
-        ? { type: 'selection', cfiRange: m.cfiRange, text: m.text }
+      return isNullableString(m.cfiRange) && isString(m.text) && (m.rect === null || isRect(m.rect))
+        ? { type: 'selection', cfiRange: m.cfiRange, text: m.text, rect: m.rect === null ? null : pickRect(m.rect) }
         : null
     case 'highlightTap':
-      return isFilled(m.id) ? { type: 'highlightTap', id: m.id } : null
+      return isFilled(m.id) && isRect(m.rect) ? { type: 'highlightTap', id: m.id, rect: pickRect(m.rect) } : null
     case 'error':
       return isString(m.message) ? { type: 'error', message: m.message } : null
     default:

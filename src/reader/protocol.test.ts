@@ -52,18 +52,35 @@ test('descarta comandos novos malformados', () => {
 test('aceita eventos válidos e descarta inválidos', () => {
   expect(parseEvent('{"type":"ready"}')).toEqual({ type: 'ready' })
   expect(
-    parseEvent(JSON.stringify({ type: 'relocated', cfi: 'epubcfi(/6/2)', percent: 0.5, href: 'cap1.xhtml' })),
+    parseEvent(
+      JSON.stringify({
+        type: 'relocated',
+        cfi: 'epubcfi(/6/2)',
+        percent: 0.5,
+        href: 'cap1.xhtml',
+        startCfi: null,
+        endCfi: null,
+      }),
+    ),
   ).toEqual({
     type: 'relocated',
     cfi: 'epubcfi(/6/2)',
     percent: 0.5,
     href: 'cap1.xhtml',
+    startCfi: null,
+    endCfi: null,
   })
-  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: null, href: null }))).toEqual({
+  expect(
+    parseEvent(
+      JSON.stringify({ type: 'relocated', cfi: 'x', percent: null, href: null, startCfi: null, endCfi: null }),
+    ),
+  ).toEqual({
     type: 'relocated',
     cfi: 'x',
     percent: null,
     href: null,
+    startCfi: null,
+    endCfi: null,
   })
   expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: 2, href: null }))).toBeNull()
   expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: null }))).toBeNull()
@@ -73,21 +90,31 @@ test('aceita eventos válidos e descarta inválidos', () => {
   expect(parseEvent('{"type":"error"}')).toBeNull()
 })
 
+const rect = { left: 10, top: 20, right: 110, bottom: 40 }
+
 test('eventos novos', () => {
   const entries = [{ label: 'C1', href: 'cap1.xhtml', depth: 0 }]
   expect(parseEvent(JSON.stringify({ type: 'toc', entries }))).toEqual({ type: 'toc', entries })
   expect(parseEvent(JSON.stringify({ type: 'toc', entries: [{ label: 'C1', href: 'x', depth: -1 }] }))).toBeNull()
-  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: 'epubcfi(/6/2)', text: 'olá' }))).toEqual({
-    type: 'selection',
-    cfiRange: 'epubcfi(/6/2)',
-    text: 'olá',
-  })
-  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: null, text: '' }))).toEqual({
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: 'epubcfi(/6/2)', text: 'olá', rect: null }))).toEqual(
+    {
+      type: 'selection',
+      cfiRange: 'epubcfi(/6/2)',
+      text: 'olá',
+      rect: null,
+    },
+  )
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: null, text: '', rect: null }))).toEqual({
     type: 'selection',
     cfiRange: null,
     text: '',
+    rect: null,
   })
-  expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h' }))).toEqual({ type: 'highlightTap', id: 'h' })
+  expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h', rect }))).toEqual({
+    type: 'highlightTap',
+    id: 'h',
+    rect,
+  })
   expect(parseEvent(JSON.stringify({ type: 'highlightTap' }))).toBeNull()
 })
 
@@ -164,4 +191,40 @@ test('mensagem nova descarta a anterior que ficou pela metade', () => {
   expect(assembler.push(newer[0])).toBeNull()
   expect(assembler.push(old[1])).toBeNull()
   expect(assembler.push(newer[1])).toBe('12345678')
+})
+
+test('eventos da v0.3', () => {
+  expect(
+    parseEvent(
+      JSON.stringify({ type: 'relocated', cfi: 'a', percent: 0.1, href: 'c.xhtml', startCfi: 's', endCfi: 'b' }),
+    ),
+  ).toEqual({
+    type: 'relocated',
+    cfi: 'a',
+    percent: 0.1,
+    href: 'c.xhtml',
+    startCfi: 's',
+    endCfi: 'b',
+  })
+  // Sem o começo da página, o evento é recusado (a página sempre manda, mesmo nulo).
+  expect(
+    parseEvent(JSON.stringify({ type: 'relocated', cfi: 'a', percent: 0.1, href: 'c.xhtml', endCfi: 'b' })),
+  ).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'a', percent: null, href: null }))).toBeNull()
+  expect(parseEvent('{"type":"linkJump"}')).toEqual({ type: 'linkJump' })
+  expect(parseEvent(JSON.stringify({ type: 'jumpEnded', ok: true }))).toEqual({ type: 'jumpEnded', ok: true })
+  expect(parseEvent(JSON.stringify({ type: 'jumpEnded' }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: 'x', text: 't', rect }))).toEqual({
+    type: 'selection',
+    cfiRange: 'x',
+    text: 't',
+    rect,
+  })
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: 'x', text: 't', rect: { left: 1 } }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h', rect }))).toEqual({
+    type: 'highlightTap',
+    id: 'h',
+    rect,
+  })
+  expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h' }))).toBeNull()
 })

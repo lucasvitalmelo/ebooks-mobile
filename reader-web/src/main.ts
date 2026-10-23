@@ -1,6 +1,6 @@
 import ePub, { EpubCFI, type Book, type Contents, type Location, type Rendition } from 'epubjs'
 import { classifyGesture, type Gesture } from '../../src/reader/gestures'
-import { hitHighlight } from '../../src/reader/hit'
+import { hitHighlight, type Rect } from '../../src/reader/hit'
 import { resolveLink } from '../../src/reader/links'
 import { Assembler, parseCommand, type Command, type HighlightRef, type ReaderEvent } from '../../src/reader/protocol'
 import type { ReaderTheme } from '../../src/reader/theme'
@@ -38,7 +38,7 @@ let settling = 0
 // desenha em cada capítulo que abre; este mapa serve para acertar toques.
 const highlights = new Map<string, string>()
 let selectionSent = false
-const HIGHLIGHT_STYLE = { fill: '#f5c400', 'fill-opacity': '0.35' }
+const HIGHLIGHT_STYLE = { fill: '#fac73c', 'fill-opacity': '0.45' }
 
 function send(event: ReaderEvent) {
   window.ReactNativeWebView?.postMessage(JSON.stringify(event))
@@ -49,8 +49,15 @@ function percentOf(cfi: string): number | null {
 }
 
 function sendPosition(cfi: string) {
-  const href = rendition ? (currentLocationOf(rendition)?.start?.href ?? null) : null
-  send({ type: 'relocated', cfi, percent: percentOf(cfi), href })
+  const location = rendition ? currentLocationOf(rendition) : undefined
+  send({
+    type: 'relocated',
+    cfi,
+    percent: percentOf(cfi),
+    href: location?.start?.href ?? null,
+    startCfi: location?.start?.cfi ?? null,
+    endCfi: location?.end?.cfi ?? null,
+  })
 }
 
 function withTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
@@ -203,7 +210,11 @@ function act(gesture: Gesture) {
 // offsetX leva a posição do toque para a tela: no iframe do capítulo, clientX é
 // relativo a ele, que no modo paginado é bem mais largo que a tela e fica deslocado.
 // hitTest: qual grifo está sob o toque (só nos capítulos; na margem não há grifo).
-function registerGestures(doc: Document, offsetX: () => number, hitTest?: (x: number, y: number) => string | null) {
+function registerGestures(
+  doc: Document,
+  offsetX: () => number,
+  hitTest?: (x: number, y: number) => { id: string; rect: Rect } | null,
+) {
   let start: { x: number; y: number; time: number; hadSelection: boolean } | null = null
   doc.addEventListener(
     'touchstart',
@@ -239,8 +250,8 @@ function registerGestures(doc: Document, offsetX: () => number, hitTest?: (x: nu
     // Toque nas bordas também vira página; reclassificado no centro, só um toque
     // de verdade (nem arrasto nem toque longo) acerta o grifo, em qualquer lugar da tela.
     if (classifyGesture({ ...move, x: window.innerWidth / 2 }) === 'centerTap') {
-      const id = hitTest?.(touch.clientX, touch.clientY)
-      if (id) return send({ type: 'highlightTap', id })
+      const hit = hitTest?.(touch.clientX, touch.clientY)
+      if (hit) return send({ type: 'highlightTap', id: hit.id, rect: hit.rect })
     }
     act(gesture)
   })
@@ -259,7 +270,10 @@ function handleLinks(doc: Document, contents: Contents, opened: Book) {
     const target = resolveLink(link.getAttribute('href') ?? '', sectionPath)
     if (!target) return
     if (target.kind === 'external') send({ type: 'openExternal', url: target.url })
-    else void goTo(opened.path.relative(target.path) + target.hash)
+    else {
+      send({ type: 'linkJump' })
+      void goTo(opened.path.relative(target.path) + target.hash)
+    }
   })
 }
 
@@ -277,11 +291,21 @@ function highlightsIn(contents: Contents) {
   return items
 }
 
+// Retângulo de um trecho na tela da WebView: o do Range é relativo ao iframe do
+// capítulo, que no modo paginado é bem mais largo que a tela e fica deslocado.
+function viewportRect(contents: Contents, cfiRange: string) {
+  const range = contents.range(cfiRange).getBoundingClientRect()
+  const frame = (contents.document.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect()
+  const dx = frame?.left ?? 0
+  const dy = frame?.top ?? 0
+  return { left: range.left + dx, top: range.top + dy, right: range.right + dx, bottom: range.bottom + dy }
+}
+
 function watchSelection(doc: Document) {
   doc.addEventListener('selectionchange', () => {
     if (!selectionSent || !(doc.getSelection()?.isCollapsed ?? true)) return
     selectionSent = false
-    send({ type: 'selection', cfiRange: null, text: '' })
+    send({ type: 'selection', cfiRange: null, text: '', rect: null })
   })
 }
 
@@ -294,7 +318,7 @@ function clearSelection() {
   if (rendition) for (const contents of contentsOf(rendition)) contents.window?.getSelection()?.removeAllRanges()
   if (selectionSent) {
     selectionSent = false
-    send({ type: 'selection', cfiRange: null, text: '' })
+    send({ type: 'selection', cfiRange: null, text: '', rect: null })
   }
 }
 
@@ -362,7 +386,11 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
     registerGestures(
       doc,
       () => (doc.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect().left ?? 0,
-      (x, y) => hitHighlight(x, y, highlightsIn(contents)),
+      (x, y) => {
+        const id = hitHighlight(x, y, highlightsIn(contents))
+        const cfiRange = id ? highlights.get(id) : undefined
+        return id && cfiRange ? { id, rect: viewportRect(contents, cfiRange) } : null
+      },
     )
     // Fonte que chega depois do layout muda o número de páginas, e o epub.js
     // 0.3.93 não percebe: resizeCheck remede e a âncora é reencontrada, mas só se
@@ -388,7 +416,12 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
   current.on('resized', resettle)
   current.on('selected', (cfiRange: string, contents: Contents) => {
     selectionSent = true
-    send({ type: 'selection', cfiRange, text: contents.range(cfiRange).toString() })
+    send({
+      type: 'selection',
+      cfiRange,
+      text: contents.range(cfiRange).toString(),
+      rect: viewportRect(contents, cfiRange),
+    })
   })
   for (const { id, cfiRange } of refs) drawHighlight(current, id, cfiRange)
   if (theme) applyTheme(theme)
@@ -426,7 +459,7 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
 
 async function goTo(target: string) {
   const r = rendition
-  if (!r || !canPage) return
+  if (!r || !canPage) return send({ type: 'jumpEnded', ok: false })
   const isCfi = target.startsWith('epubcfi(')
   anchor = isCfi ? target : null
   settling++
@@ -438,10 +471,14 @@ async function goTo(target: string) {
       await nextFrames(3)
       anchor = currentLocationOf(r)?.start?.cfi ?? null
     }
+  } catch (error) {
+    console.error('Salto falhou', error)
+    return send({ type: 'jumpEnded', ok: false })
   } finally {
     settling--
   }
   if (anchor) sendPosition(anchor)
+  send({ type: 'jumpEnded', ok: true })
 }
 
 async function handle(command: Command) {

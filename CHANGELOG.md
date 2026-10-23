@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.1.0...v0.2.0) (2026-10-23)
+
+
+### Funcionalidades
+
+* **db:** adiciona a tabela e o repositório de grifos ([73b587f](https://github.com/lucasvitalmelo/ebooks-mobile/commit/73b587f63618c96170f6819c6ea41d231b64c611))
+* **reader:** acrescenta grifos, seleção e sumário ao protocolo ([78e095d](https://github.com/lucasvitalmelo/ebooks-mobile/commit/78e095da5cf55a7ec86538daa845c40184133f03))
+* **reader:** adiciona sumário, grifos e barra aberta ao entrar no livro ([ba9187a](https://github.com/lucasvitalmelo/ebooks-mobile/commit/ba9187a48701c2eee53e0267284262822fd3d6ef))
+* **reader:** resolve links, acerta toques em grifo e achata o sumário ([ea29456](https://github.com/lucasvitalmelo/ebooks-mobile/commit/ea29456e609fdf974d637d36b8f9bbba70ebb407))
+
+
+### Correções
+
+* alinha o include do tsconfig ao que o Expo SDK 58 grava ([eb181a4](https://github.com/lucasvitalmelo/ebooks-mobile/commit/eb181a412c3dbb7fcdef52173968124a1a47857f))
+* **app:** faz a barra de status e a biblioteca seguirem o tema ([141525e](https://github.com/lucasvitalmelo/ebooks-mobile/commit/141525e9b3f79ae1cfa320eefc6c393ac2f88c0a))
+* evita CHANGELOG duplicado com títulos de PR sem prefixo de tipo ([f434b79](https://github.com/lucasvitalmelo/ebooks-mobile/commit/f434b791eeb7568477a53eccb3958fdcea666d85))
+* **reader:** trata links, grifos e seleção com listeners no capítulo ([13f1e98](https://github.com/lucasvitalmelo/ebooks-mobile/commit/13f1e9805050724fb3a16b170b67861135a1b615))
+
+
+### Documentação
+
+* registra a regra nova de issues e as decisões da v0.2 ([d8e2e75](https://github.com/lucasvitalmelo/ebooks-mobile/commit/d8e2e75cef175cca9950371d5f994d76cb0d7662))
+
 ## 0.1.0 (2026-10-23)
 
 

@@ -27,7 +27,7 @@ Branches `main` (releases) e `develop` (integração); features em `feat/<nome>`
 
 ## Roadmap
 
-- [ ] MVP: importar EPUB, biblioteca, leitor, progresso, temas
+- [x] MVP: importar EPUB, biblioteca, leitor, progresso, temas
 - [ ] Grifos e seleção de texto
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)

@@ -1,15 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, Linking, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { AppearanceSheet } from '@/components/AppearanceSheet'
 import { Reader, type ReaderHandle } from '@/components/Reader'
 import { getBook, markOpened, saveLocations, type Book } from '@/lib/db/books'
-import { PRESET_THEMES } from '@/lib/db/presets'
 import { getProgress, saveProgress } from '@/lib/db/progress'
 import { useDb } from '@/lib/db/provider'
 import { toReaderTheme } from '@/lib/db/themes'
 import { readBase64 } from '@/lib/files'
+import { chromeFor } from '@/lib/tone'
 import type { ReaderEvent } from '@/reader/protocol'
+import { themeStore, useThemeStore } from '@/store/theme-store'
 
 const SAVE_DELAY_MS = 1000
 
@@ -24,10 +27,12 @@ export default function BookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const db = useDb()
   const reader = useRef<ReaderHandle>(null)
-  const theme = PRESET_THEMES[0]
+  const theme = useThemeStore((s) => s.active)
+  const chrome = chromeFor(theme.background)
   const [book, setBook] = useState<Book | null>(null)
   const [percent, setPercent] = useState<number | null>(null)
   const [barVisible, setBarVisible] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pending = useRef<{ cfi: string; percent: number | null } | null>(null)
   // A porcentagem só existe depois das locations; um relocated sem ela não
@@ -73,14 +78,18 @@ export default function BookScreen() {
       const [progress, base64] = await Promise.all([getProgress(db, id), readBase64(found.filePath)])
       lastPercent.current = progress?.percent ?? null
       setPercent(lastPercent.current)
-      reader.current?.send({ type: 'setTheme', theme: toReaderTheme(theme) })
+      reader.current?.send({ type: 'setTheme', theme: toReaderTheme(themeStore.getState().active) })
       reader.current?.send({ type: 'open', base64, cfi: progress?.cfi ?? null, locations: found.locations })
       await markOpened(db, id, Date.now())
     } catch (e) {
       console.error(e)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [db, id, save, theme])
+  }, [db, id, save])
+
+  useEffect(() => {
+    reader.current?.send({ type: 'setTheme', theme: toReaderTheme(theme) })
+  }, [theme])
 
   const onEvent = useCallback(
     (event: ReaderEvent) => {
@@ -122,20 +131,29 @@ export default function BookScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
       {/* A barra é absoluta: posicionada dentro desta View, fica abaixo da barra de status. */}
+      <StatusBar style={chrome.statusBar} />
       <View style={styles.screen}>
         <Reader ref={reader} background={theme.background} onEvent={onEvent} />
         {barVisible && (
-          <View style={styles.bar}>
-            <Pressable onPress={() => router.back()} style={styles.button}>
-              <Text>Voltar</Text>
+          <View style={[styles.bar, { backgroundColor: chrome.surface }]}>
+            <Pressable onPress={() => router.back()} style={[styles.button, { backgroundColor: chrome.control }]}>
+              <Text style={{ color: chrome.text }}>Voltar</Text>
             </Pressable>
-            <Text style={styles.barTitle} numberOfLines={1}>
+            <Text style={[styles.barTitle, { color: chrome.text }]} numberOfLines={1}>
               {book?.title}
             </Text>
-            <Text>{percent === null ? '' : `${Math.round(percent * 100)}%`}</Text>
+            <Pressable
+              accessibilityLabel="Aparência"
+              onPress={() => setSheetOpen(true)}
+              style={[styles.button, { backgroundColor: chrome.control }]}
+            >
+              <Text style={{ color: chrome.text }}>Aa</Text>
+            </Pressable>
+            <Text style={{ color: chrome.text }}>{percent === null ? '' : `${Math.round(percent * 100)}%`}</Text>
           </View>
         )}
       </View>
+      <AppearanceSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
     </SafeAreaView>
   )
 }
@@ -153,7 +171,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
   },
   barTitle: { flex: 1, fontWeight: '600' },
   button: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#f0e6ff' },

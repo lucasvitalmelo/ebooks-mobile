@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        /* transparente até o setTheme: a WebView já tem o fundo do tema e um tema escuro não pisca branco */
+        background: transparent;
+        height: 100%;
+        overflow: hidden;
+      }
+      #viewer {
+        position: absolute;
+        top: 16px;
+        bottom: 16px;
+        left: 24px;
+        right: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="viewer"></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

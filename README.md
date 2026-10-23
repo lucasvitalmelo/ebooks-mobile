@@ -19,13 +19,15 @@ npm run format         # Prettier (escreve)
 npm run format:check   # Prettier (só confere; roda no CI)
 ```
 
+`fixtures/livro-de-teste.epub` é copiado do leitor web (lá ele é gerado por `scripts/generate-test-epub.mjs`): 8 capítulos e notas, capa PNG, texto acentuado. Os testes do parser usam ele.
+
 ## Fluxo de trabalho
 
 Branches `main` (releases) e `develop` (integração); features em `feat/<nome>` saindo de `develop`, correções em `fix/<issue>-<nome>`. Tudo entra por PR com merge commit e CI verde. Releases pelo release-please, com o APK anexado na Release. Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md); arquitetura em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
-- [ ] MVP: importar EPUB, biblioteca, leitor, progresso, temas
+- [x] MVP: importar EPUB, biblioteca, leitor, progresso, temas
 - [ ] Grifos e seleção de texto
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)

@@ -1,0 +1,7 @@
+# LF em qualquer sistema: o Prettier exige LF, e com core.autocrlf no Windows o checkout gravaria CRLF.
+* text=auto eol=lf
+
+*.epub binary
+*.png binary
+*.jpg binary
+*.woff2 binary

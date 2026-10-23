@@ -4,19 +4,31 @@ import { Assembler, chunkMessage, parseCommand, parseEvent } from './protocol'
 
 const theme = toReaderTheme(PRESET_THEMES[0])
 
+const highlight = { id: 'h', cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:5)' }
+
 test('aceita comandos válidos', () => {
-  expect(parseCommand(JSON.stringify({ type: 'open', base64: 'AAA', cfi: null, locations: null }))).toEqual({
-    type: 'open',
-    base64: 'AAA',
-    cfi: null,
-    locations: null,
-  })
+  expect(
+    parseCommand(JSON.stringify({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [highlight] })),
+  ).toEqual({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [highlight] })
   expect(parseCommand('{"type":"next"}')).toEqual({ type: 'next' })
-  expect(parseCommand(JSON.stringify({ type: 'goTo', cfi: 'epubcfi(/6/2)' }))).toEqual({
+  expect(parseCommand(JSON.stringify({ type: 'goTo', target: 'epubcfi(/6/2)' }))).toEqual({
     type: 'goTo',
-    cfi: 'epubcfi(/6/2)',
+    target: 'epubcfi(/6/2)',
+  })
+  expect(parseCommand(JSON.stringify({ type: 'goTo', target: 'cap3.xhtml#sec-3-2' }))).toEqual({
+    type: 'goTo',
+    target: 'cap3.xhtml#sec-3-2',
   })
   expect(parseCommand(JSON.stringify({ type: 'setTheme', theme }))).toEqual({ type: 'setTheme', theme })
+  expect(parseCommand(JSON.stringify({ type: 'addHighlight', ...highlight }))).toEqual({
+    type: 'addHighlight',
+    ...highlight,
+  })
+  expect(parseCommand(JSON.stringify({ type: 'removeHighlight', id: 'h' }))).toEqual({
+    type: 'removeHighlight',
+    id: 'h',
+  })
+  expect(parseCommand('{"type":"clearSelection"}')).toEqual({ type: 'clearSelection' })
 })
 
 test('descarta comandos inválidos', () => {
@@ -26,23 +38,57 @@ test('descarta comandos inválidos', () => {
   expect(parseCommand(JSON.stringify({ type: 'setTheme', theme: { ...theme, fontFamily: 'comic-sans' } }))).toBeNull()
 })
 
+test('descarta comandos novos malformados', () => {
+  expect(parseCommand(JSON.stringify({ type: 'open', base64: 'A', cfi: null, locations: null }))).toBeNull()
+  expect(
+    parseCommand(JSON.stringify({ type: 'open', base64: 'A', cfi: null, locations: null, highlights: [{ id: 1 }] })),
+  ).toBeNull()
+  expect(parseCommand(JSON.stringify({ type: 'goTo', target: '' }))).toBeNull()
+  expect(parseCommand(JSON.stringify({ type: 'goTo', cfi: 'epubcfi(/6/2)' }))).toBeNull()
+  expect(parseCommand(JSON.stringify({ type: 'addHighlight', id: 'h' }))).toBeNull()
+  expect(parseCommand(JSON.stringify({ type: 'removeHighlight', id: '' }))).toBeNull()
+})
+
 test('aceita eventos válidos e descarta inválidos', () => {
   expect(parseEvent('{"type":"ready"}')).toEqual({ type: 'ready' })
-  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'epubcfi(/6/2)', percent: 0.5 }))).toEqual({
+  expect(
+    parseEvent(JSON.stringify({ type: 'relocated', cfi: 'epubcfi(/6/2)', percent: 0.5, href: 'cap1.xhtml' })),
+  ).toEqual({
     type: 'relocated',
     cfi: 'epubcfi(/6/2)',
     percent: 0.5,
+    href: 'cap1.xhtml',
   })
-  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: null }))).toEqual({
+  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: null, href: null }))).toEqual({
     type: 'relocated',
     cfi: 'x',
     percent: null,
+    href: null,
   })
-  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: 2 }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: 2, href: null }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'relocated', cfi: 'x', percent: null }))).toBeNull()
   expect(parseEvent(JSON.stringify({ type: 'locations', data: '[]' }))).toEqual({ type: 'locations', data: '[]' })
   expect(parseEvent('{"type":"centerTap"}')).toEqual({ type: 'centerTap' })
   expect(parseEvent(JSON.stringify({ type: 'error', message: 'falhou' }))).toEqual({ type: 'error', message: 'falhou' })
   expect(parseEvent('{"type":"error"}')).toBeNull()
+})
+
+test('eventos novos', () => {
+  const entries = [{ label: 'C1', href: 'cap1.xhtml', depth: 0 }]
+  expect(parseEvent(JSON.stringify({ type: 'toc', entries }))).toEqual({ type: 'toc', entries })
+  expect(parseEvent(JSON.stringify({ type: 'toc', entries: [{ label: 'C1', href: 'x', depth: -1 }] }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: 'epubcfi(/6/2)', text: 'olá' }))).toEqual({
+    type: 'selection',
+    cfiRange: 'epubcfi(/6/2)',
+    text: 'olá',
+  })
+  expect(parseEvent(JSON.stringify({ type: 'selection', cfiRange: null, text: '' }))).toEqual({
+    type: 'selection',
+    cfiRange: null,
+    text: '',
+  })
+  expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h' }))).toEqual({ type: 'highlightTap', id: 'h' })
+  expect(parseEvent(JSON.stringify({ type: 'highlightTap' }))).toBeNull()
 })
 
 test('quebra e remonta mensagens grandes', () => {

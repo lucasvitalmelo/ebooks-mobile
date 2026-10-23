@@ -21,6 +21,7 @@ npm start · npm test · npm run lint · npm run typecheck · npm run format:che
 - **Commits por contexto**, não um por task: dentro de um PR, cada conjunto coeso de arquivos é um commit. Continua valendo: mensagem de uma linha, sem corpo, sem trailers de coautoria, e nada de commit, push ou PR sem aprovação explícita do Lucas na conversa.
 - Tipos de commit: `feat`, `fix`, `docs`, `style`, `refactor`, `chore`, `test`. Mudanças de CI/workflows usam `chore(ci)` (não existe tipo `ci`).
 - **Merge commit** em todos os PRs (`gh pr merge --merge`). Nunca squash ou rebase.
+- **Título do PR sem prefixo de tipo** (frase comum em português, não `feat(...)`): o título vai para o merge commit e o release-please o leria como mais um commit, duplicando o CHANGELOG (#19).
 - **Issue de bug só para bug que já está em `develop` ou `main`.** Bug surgido numa feature ainda não mergeada é corrigido na própria branch, sem issue. PR de correção leva `Closes #N`.
 - Toda feature sai de `develop` numa branch `feat/<nome>` e volta por PR para `develop`.
 

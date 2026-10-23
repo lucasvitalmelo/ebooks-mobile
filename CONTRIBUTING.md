@@ -5,13 +5,12 @@
 - `main`: só releases. Recebe PRs de `develop` e o PR de release do release-please.
 - `develop`: integração. Recebe PRs de features e correções.
 - Features: `feat/<nome>`, a partir de `develop`.
-- Correções de bug com issue: `fix/<numero-da-issue>-<nome>`, a partir de `develop`.
 
 Ninguém faz push direto em `main` ou `develop`: um ruleset do GitHub exige PR (sem mínimo de aprovações), o check `check` do CI verde e só permite **merge commit** (squash e rebase estão desligados); force push e exclusão dessas branches também são bloqueados.
 
 ## Issues de bug
 
-Só vira issue o bug que **já está em `develop` ou `main`** — por exemplo, ao começar uma feature nova você nota um bug que já existia em `develop`. O PR que corrige leva `Closes #N` na descrição.
+Só vira issue o bug que **já está em `develop` ou `main`** — por exemplo, ao testar uma versão você acha um bug. A correção pode ir no PR da próxima feature (não precisa de um PR só para ela): o PR leva um `Closes #N` para cada issue que fecha.
 
 Bug que aparece durante uma feature ainda não mergeada é corrigido na própria branch, sem issue.
 

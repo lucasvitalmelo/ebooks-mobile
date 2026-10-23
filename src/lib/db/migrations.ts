@@ -45,6 +45,19 @@ const MIGRATIONS: ((db: Db) => Promise<void>)[] = [
       )
     }
   },
+  async (db) => {
+    await db.exec(`
+      CREATE TABLE highlights (
+        id TEXT PRIMARY KEY NOT NULL,
+        bookId TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        cfiRange TEXT NOT NULL,
+        text TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+      CREATE INDEX highlights_book ON highlights(bookId);
+    `)
+  },
 ]
 
 export async function migrate(db: Db): Promise<void> {

@@ -17,26 +17,32 @@ export function isDark(background: string): boolean {
 export interface Chrome {
   statusBar: 'light' | 'dark'
   text: string
+  muted: string
   surface: string
   control: string
   border: string
+  placeholder: string
 }
 
-// Cores da barra e da folha de aparência (que ficam fora da página do livro) para o fundo do tema.
+// Cores do que fica fora da página do livro (barras, folhas, Biblioteca) para o fundo do tema.
 export function chromeFor(background: string): Chrome {
   return isDark(background)
     ? {
         statusBar: 'light',
         text: '#f4f4f5',
+        muted: '#a1a1aa',
         surface: 'rgba(32,32,38,0.96)',
         control: 'rgba(255,255,255,0.14)',
         border: 'rgba(255,255,255,0.22)',
+        placeholder: 'rgba(255,255,255,0.08)',
       }
     : {
         statusBar: 'dark',
         text: '#1f1f1f',
+        muted: '#666666',
         surface: 'rgba(255,255,255,0.96)',
         control: '#f0e6ff',
         border: '#dddddd',
+        placeholder: '#eeeeee',
       }
 }

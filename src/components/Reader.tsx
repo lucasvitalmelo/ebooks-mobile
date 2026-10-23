@@ -40,6 +40,8 @@ export function Reader({ ref, background, onEvent }: Props) {
       ref={webview}
       source={{ html: READER_HTML }}
       originWhitelist={['*']}
+      // Sem itens, o Android não abre o menu da seleção; Grifar e Copiar ficam na barra do app.
+      menuItems={[]}
       style={[styles.webview, { backgroundColor: background }]}
       onMessage={(event) => {
         const parsed = parseEvent(event.nativeEvent.data)

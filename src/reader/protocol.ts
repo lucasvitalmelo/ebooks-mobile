@@ -1,19 +1,33 @@
 import { isFontId } from './fonts'
 import type { ReaderTheme } from './theme'
 
+import type { TocEntry } from './toc'
+
+export interface HighlightRef {
+  id: string
+  cfiRange: string
+}
+
 export type Command =
-  | { type: 'open'; base64: string; cfi: string | null; locations: string | null }
+  | { type: 'open'; base64: string; cfi: string | null; locations: string | null; highlights: HighlightRef[] }
   | { type: 'next' }
   | { type: 'prev' }
-  | { type: 'goTo'; cfi: string }
+  // CFI (epubcfi(...)) ou href de capítulo, como vem do sumário.
+  | { type: 'goTo'; target: string }
   | { type: 'setTheme'; theme: ReaderTheme }
+  | { type: 'addHighlight'; id: string; cfiRange: string }
+  | { type: 'removeHighlight'; id: string }
+  | { type: 'clearSelection' }
 
 export type ReaderEvent =
   | { type: 'ready' }
-  | { type: 'relocated'; cfi: string; percent: number | null }
+  | { type: 'relocated'; cfi: string; percent: number | null; href: string | null }
   | { type: 'locations'; data: string }
   | { type: 'centerTap' }
   | { type: 'openExternal'; url: string }
+  | { type: 'toc'; entries: TocEntry[] }
+  | { type: 'selection'; cfiRange: string | null; text: string }
+  | { type: 'highlightTap'; id: string }
   | { type: 'error'; message: string }
 
 type Fields = Record<string, unknown>
@@ -56,21 +70,57 @@ function pickTheme(t: ReaderTheme): ReaderTheme {
   return { background, text, link, fontFamily, fontSize, lineHeight, margin }
 }
 
+const isFilled = (value: unknown): value is string => isString(value) && value.length > 0
+
+function isHighlightRef(value: unknown): value is HighlightRef {
+  if (!value || typeof value !== 'object') return false
+  const h = value as Fields
+  return isFilled(h.id) && isFilled(h.cfiRange)
+}
+
+function isTocEntry(value: unknown): value is TocEntry {
+  if (!value || typeof value !== 'object') return false
+  const e = value as Fields
+  return isString(e.label) && isString(e.href) && isInteger(e.depth) && e.depth >= 0
+}
+
+const arrayOf =
+  <T>(check: (value: unknown) => value is T) =>
+  (value: unknown): value is T[] =>
+    Array.isArray(value) && value.every(check)
+
+const isHighlightRefs = arrayOf(isHighlightRef)
+const isTocEntries = arrayOf(isTocEntry)
+
 export function parseCommand(raw: string): Command | null {
   const m = parseObject(raw)
   if (!m) return null
   switch (m.type) {
     case 'open':
-      return isString(m.base64) && isNullableString(m.cfi) && isNullableString(m.locations)
-        ? { type: 'open', base64: m.base64, cfi: m.cfi, locations: m.locations }
+      return isString(m.base64) &&
+        isNullableString(m.cfi) &&
+        isNullableString(m.locations) &&
+        isHighlightRefs(m.highlights)
+        ? {
+            type: 'open',
+            base64: m.base64,
+            cfi: m.cfi,
+            locations: m.locations,
+            highlights: m.highlights.map(({ id, cfiRange }) => ({ id, cfiRange })),
+          }
         : null
     case 'next':
     case 'prev':
+    case 'clearSelection':
       return { type: m.type }
     case 'goTo':
-      return isString(m.cfi) ? { type: 'goTo', cfi: m.cfi } : null
+      return isFilled(m.target) ? { type: 'goTo', target: m.target } : null
     case 'setTheme':
       return isReaderTheme(m.theme) ? { type: 'setTheme', theme: pickTheme(m.theme) } : null
+    case 'addHighlight':
+      return isFilled(m.id) && isFilled(m.cfiRange) ? { type: 'addHighlight', id: m.id, cfiRange: m.cfiRange } : null
+    case 'removeHighlight':
+      return isFilled(m.id) ? { type: 'removeHighlight', id: m.id } : null
     default:
       return null
   }
@@ -84,13 +134,25 @@ export function parseEvent(raw: string): ReaderEvent | null {
     case 'centerTap':
       return { type: m.type }
     case 'relocated':
-      return isString(m.cfi) && (m.percent === null || (isNumber(m.percent) && m.percent >= 0 && m.percent <= 1))
-        ? { type: 'relocated', cfi: m.cfi, percent: m.percent }
+      return isString(m.cfi) &&
+        (m.percent === null || (isNumber(m.percent) && m.percent >= 0 && m.percent <= 1)) &&
+        isNullableString(m.href)
+        ? { type: 'relocated', cfi: m.cfi, percent: m.percent, href: m.href }
         : null
     case 'locations':
       return isString(m.data) ? { type: 'locations', data: m.data } : null
     case 'openExternal':
       return isString(m.url) && isExternalUrl(m.url) ? { type: 'openExternal', url: m.url } : null
+    case 'toc':
+      return isTocEntries(m.entries)
+        ? { type: 'toc', entries: m.entries.map(({ label, href, depth }) => ({ label, href, depth })) }
+        : null
+    case 'selection':
+      return isNullableString(m.cfiRange) && isString(m.text)
+        ? { type: 'selection', cfiRange: m.cfiRange, text: m.text }
+        : null
+    case 'highlightTap':
+      return isFilled(m.id) ? { type: 'highlightTap', id: m.id } : null
     case 'error':
       return isString(m.message) ? { type: 'error', message: m.message } : null
     default:

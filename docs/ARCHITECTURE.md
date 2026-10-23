@@ -8,7 +8,7 @@ App Expo com Expo Router. Duas telas no MVP: Biblioteca (`src/app/index.tsx`) e 
 
 ## Fronteiras
 
-- `src/lib/db/`: SQLite atrás de uma interface `Db` pequena; no app, `expo-sqlite`; nos testes, `better-sqlite3`.
+- `src/lib/db/`: SQLite atrás de uma interface `Db` pequena; no app, `expo-sqlite`; nos testes, `node:sqlite`.
 - `src/reader/protocol.ts`: única via entre RN e a WebView (comandos `open`, `next`, `prev`, `goTo`, `setTheme`; eventos `ready`, `relocated`, `error`).
 - `reader-web/`: app web mínimo com epub.js compilado num único HTML embutido no app.
 
@@ -22,3 +22,4 @@ App Expo com Expo Router. Duas telas no MVP: Biblioteca (`src/app/index.tsx`) e 
 - **Build do APK no mesmo workflow do release-please**: a Release criada pelo `GITHUB_TOKEN` não dispara outro workflow.
 - **`versionCode` remoto no EAS**: evita commitar contador de build; a versão visível vem do release-please.
 - **Dependabot ignora os pacotes do SDK do Expo** (expo, react, react-native, typescript, eslint, jest e relacionados) e saltos major nos demais: esses pacotes precisam das versões que o SDK fixa, e atualizados sozinhos quebram o lint e o `expo-doctor` (#7). Sobem juntos, à mão, com `npx expo install --fix` na troca de SDK.
+- **`node:sqlite` nos testes**: embutido no Node 24, sem binário nativo para compilar no Windows nem no CI. Os tipos vêm de um `declare module` mínimo em `src/test/node-modules.d.ts`, porque o `@types/node` inteiro conflitaria com os tipos de timer do RN.

@@ -23,6 +23,10 @@
       "favicon": "./assets/favicon.png"
     },
     "scheme": "ebooks",
-    "plugins": ["expo-router", "expo-status-bar"]
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite"
+    ]
   }
 }

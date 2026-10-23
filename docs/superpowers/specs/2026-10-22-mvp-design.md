@@ -56,7 +56,7 @@ A camada de banco é escrita contra uma interface `Db` pequena (`exec`, `run`, `
 Mensagens JSON com campo `type`, validadas dos dois lados (mensagem inválida é descartada e logada).
 
 - Comandos (RN → WebView): `open { base64, cfi, locations }`, `next`, `prev`, `goTo { cfi }`, `setTheme { theme }`
-- Eventos (WebView → RN): `ready`, `relocated { cfi, percent | null }` (`null` enquanto as locations não existem), `locations { data }`, `centerTap`, `error { message }`
+- Eventos (WebView → RN): `ready`, `relocated { cfi, percent | null }` (`null` enquanto as locations não existem), `locations { data }`, `centerTap`, `openExternal { url }` (link `http(s)`/`mailto` tocado no livro, aberto fora do app), `error { message }`
 
 `locations` é o leitor avisando que gerou as "locations" do epub.js (geradas uma vez por livro, são o que permite calcular a porcentagem); o app guarda e devolve no próximo `open`, para não regerar a cada abertura. `centerTap` existe porque a WebView engole os toques: quem mostra/esconde a barra é o RN, mas só a página sabe que o toque foi no centro.
 

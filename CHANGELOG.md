@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.2.0...v0.3.0) (2026-10-23)
+
+
+### Funcionalidades
+
+* **app:** deriva as cores da interface do tema, como no leitor web ([875a611](https://github.com/lucasvitalmelo/ebooks-mobile/commit/875a61157ac9450e6f112ea4824f54c8835cfa50))
+* **library:** lista o progresso de cada livro e guarda a opção de tela acesa ([65b65b0](https://github.com/lucasvitalmelo/ebooks-mobile/commit/65b65b0e33c4332d4de1662beadbe541d14d8b1b))
+* **library:** redesenha a biblioteca como no leitor web ([35a2ce5](https://github.com/lucasvitalmelo/ebooks-mobile/commit/35a2ce5c9f3a9c46f1785a53716a95665bee739a))
+* **reader:** adiciona o ponto de retorno e as barras fixas do leitor ([b00fff0](https://github.com/lucasvitalmelo/ebooks-mobile/commit/b00fff0362f9df42d9342c40485e4602b91bae56))
+* **reader:** avisa saltos, começo e fim da página e posição da seleção ([3cf8c6b](https://github.com/lucasvitalmelo/ebooks-mobile/commit/3cf8c6badc9b18cb8b2d99bcda80e0409f1e938d))
+* **reader:** porta o ponto de retorno e a posição do cartão do leitor web ([93c500a](https://github.com/lucasvitalmelo/ebooks-mobile/commit/93c500a8f899b865b45cb1cf2e359d50f6dc05e4))
+* **reader:** redesenha ajustes, sumário e seleção como no leitor web ([edbecda](https://github.com/lucasvitalmelo/ebooks-mobile/commit/edbecda03042c49142861d051281c1a109c1e723))
+
+
+### Documentação
+
+* registra as decisões da v0.3 ([0fb9640](https://github.com/lucasvitalmelo/ebooks-mobile/commit/0fb96401d6cca482c6600bb726eff182410a013a))
+
 ## [0.2.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.1.0...v0.2.0) (2026-10-23)
 
 

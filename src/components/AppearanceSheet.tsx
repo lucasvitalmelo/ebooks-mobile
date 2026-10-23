@@ -1,9 +1,15 @@
+import Slider from '@react-native-community/slider'
+import { Check, ChevronDown, X } from 'lucide-react-native'
+import { useState } from 'react'
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { chromeFor } from '@/lib/tone'
 import { useDb } from '@/lib/db/provider'
+import { paletteFor } from '@/lib/palette'
 import { FONTS } from '@/reader/fonts'
-import { adjust, LIMITS, themeStore, useThemeStore } from '@/store/theme-store'
+import { LIMITS, themeStore, useThemeStore } from '@/store/theme-store'
+import { UI_FONT } from '@/ui/fonts'
+
+type LimitKey = keyof typeof LIMITS
 
 interface Props {
   visible: boolean
@@ -18,9 +24,11 @@ export function AppearanceSheet({ visible, onClose }: Props) {
   const db = useDb()
   const themes = useThemeStore((s) => s.themes)
   const active = useThemeStore((s) => s.active)
+  const keepAwake = useThemeStore((s) => s.keepAwake)
   const insets = useSafeAreaInsets()
-  const chrome = chromeFor(active.background)
-  const { select, update, remove } = themeStore.getState()
+  const palette = paletteFor(active)
+  const [fontsOpen, setFontsOpen] = useState(false)
+  const { select, update, remove, setKeepAwake } = themeStore.getState()
 
   function confirmRemove(id: string, name: string) {
     Alert.alert('Apagar tema', `Apagar "${name}"?`, [
@@ -29,83 +37,163 @@ export function AppearanceSheet({ visible, onClose }: Props) {
     ])
   }
 
-  const stepper = (label: string, key: keyof typeof LIMITS, format: (v: number) => string) => (
-    <View style={styles.row}>
-      <Text style={[styles.label, { color: chrome.text }]}>{label}</Text>
-      <Pressable
-        accessibilityLabel={`Diminuir ${label}`}
-        style={[styles.step, { backgroundColor: chrome.control }]}
-        onPress={() => update(db, (t) => ({ [key]: adjust(t[key], -1, LIMITS[key]) })).catch(report)}
-      >
-        <Text style={[styles.stepText, { color: chrome.text }]}>−</Text>
-      </Pressable>
-      <Text style={[styles.value, { color: chrome.text }]}>{format(active[key])}</Text>
-      <Pressable
-        accessibilityLabel={`Aumentar ${label}`}
-        style={[styles.step, { backgroundColor: chrome.control }]}
-        onPress={() => update(db, (t) => ({ [key]: adjust(t[key], 1, LIMITS[key]) })).catch(report)}
-      >
-        <Text style={[styles.stepText, { color: chrome.text }]}>+</Text>
-      </Pressable>
-    </View>
+  const label = (text: string) => <Text style={[styles.label, { color: palette.text }]}>{text}</Text>
+
+  // O valor em arraste: o rótulo acompanha o dedo, e o tema só é gravado ao soltar.
+  const [draft, setDraft] = useState<Partial<Record<LimitKey, number>>>({})
+  const shown = (key: LimitKey) => draft[key] ?? active[key]
+  const round = (value: number) => Math.round(value * 10) / 10
+
+  const slider = (key: LimitKey) => (
+    <Slider
+      minimumValue={LIMITS[key].min}
+      maximumValue={LIMITS[key].max}
+      step={LIMITS[key].step}
+      value={active[key]}
+      minimumTrackTintColor={palette.fill}
+      maximumTrackTintColor={palette.track}
+      thumbTintColor={palette.primary}
+      onValueChange={(value) => setDraft((current) => ({ ...current, [key]: round(value) }))}
+      onSlidingComplete={(value) =>
+        update(db, { [key]: round(value) })
+          .catch(report)
+          .finally(() =>
+            setDraft((current) => {
+              const { [key]: _done, ...rest } = current
+              return rest
+            }),
+          )
+      }
+    />
   )
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {/* Sem escurecer: a página continua visível enquanto se ajusta, como no leitor web. */}
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: chrome.surface, paddingBottom: 16 + insets.bottom }]}>
-        <Text style={[styles.section, { color: chrome.text }]}>Tema</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {themes.map((theme) => (
+      <View style={[styles.sheet, { backgroundColor: palette.panel, paddingBottom: 16 + insets.bottom }]}>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: palette.text }]}>Ajustes de leitura</Text>
+          <Pressable accessibilityLabel="Fechar" onPress={onClose} style={styles.icon}>
+            <X size={20} color={palette.text} />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.group}>
+            {label('Paleta')}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
+              {themes.map((theme) => (
+                <Pressable
+                  key={theme.id}
+                  accessibilityLabel={theme.name}
+                  accessibilityState={{ selected: theme.id === active.id }}
+                  onPress={() => select(db, theme.id).catch(report)}
+                  onLongPress={theme.builtin ? undefined : () => confirmRemove(theme.id, theme.name)}
+                  style={[styles.swatch, { backgroundColor: theme.background, borderColor: palette.panelBorder }]}
+                >
+                  {theme.id === active.id && <Check size={18} color={theme.text} />}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+          <View style={styles.group}>
+            {label('Fonte')}
             <Pressable
-              key={theme.id}
-              onPress={() => select(db, theme.id).catch(report)}
-              onLongPress={theme.builtin ? undefined : () => confirmRemove(theme.id, theme.name)}
-              style={[
-                styles.chip,
-                { backgroundColor: theme.background, borderColor: chrome.border },
-                theme.id === active.id && styles.selected,
-              ]}
+              onPress={() => setFontsOpen((open) => !open)}
+              style={[styles.select, { borderColor: palette.panelBorder }]}
             >
-              <Text style={{ color: theme.text }}>{theme.name}</Text>
+              <Text style={[styles.value, { color: palette.text }]}>
+                {FONTS.find((f) => f.id === active.fontFamily)?.label}
+              </Text>
+              <ChevronDown size={16} color={palette.muted} />
             </Pressable>
-          ))}
+            {fontsOpen &&
+              FONTS.map((font) => (
+                <Pressable
+                  key={font.id}
+                  onPress={() => {
+                    setFontsOpen(false)
+                    update(db, { fontFamily: font.id }).catch(report)
+                  }}
+                  style={styles.option}
+                >
+                  <Text style={[styles.value, { color: palette.text }]}>{font.label}</Text>
+                  {font.id === active.fontFamily && <Check size={16} color={palette.text} />}
+                </Pressable>
+              ))}
+          </View>
+          <View style={styles.group}>
+            {label(`Tamanho da fonte (${shown('fontSize')}px)`)}
+            {slider('fontSize')}
+          </View>
+          <View style={styles.group}>
+            {label(`Espaçamento entre linhas (${shown('lineHeight').toFixed(1)})`)}
+            {slider('lineHeight')}
+          </View>
+          <View style={styles.group}>
+            {label(`Margem (${shown('margin')}px)`)}
+            {slider('margin')}
+          </View>
+          <View style={styles.row}>
+            <Text style={[styles.value, styles.rowLabel, { color: palette.text }]}>
+              Manter a tela acesa durante a leitura
+            </Text>
+            <Switch
+              value={keepAwake}
+              onValueChange={(value) => setKeepAwake(db, value).catch(report)}
+              trackColor={{ true: palette.fill, false: palette.track }}
+              thumbColor={palette.primary}
+            />
+          </View>
         </ScrollView>
-        <Text style={[styles.section, { color: chrome.text }]}>Fonte</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {FONTS.map((font) => (
-            <Pressable
-              key={font.id}
-              onPress={() => update(db, { fontFamily: font.id }).catch(report)}
-              style={[styles.chip, { borderColor: chrome.border }, font.id === active.fontFamily && styles.selected]}
-            >
-              <Text style={{ color: chrome.text }}>{font.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        {stepper('Tamanho', 'fontSize', (v) => `${v}`)}
-        {stepper('Entrelinha', 'lineHeight', (v) => v.toFixed(1))}
-        {stepper('Margem', 'margin', (v) => `${v}`)}
       </View>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  backdrop: { flex: 1 },
   sheet: {
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 8,
+    maxHeight: '70%',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -8 },
   },
-  section: { fontWeight: '600', marginTop: 8 },
-  chips: { gap: 8, paddingVertical: 4 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
-  selected: { borderColor: '#7c4dcc', borderWidth: 2 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingBottom: 0,
+  },
+  title: { fontSize: 16, fontFamily: UI_FONT.semibold },
+  icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 16, gap: 24 },
+  group: { gap: 8 },
+  label: { fontSize: 14, fontFamily: UI_FONT.medium },
+  swatches: { gap: 10, paddingVertical: 2 },
+  swatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  select: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  value: { fontSize: 14, fontFamily: UI_FONT.regular },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  label: { flex: 1 },
-  step: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 20 },
-  value: { width: 40, textAlign: 'center' },
+  rowLabel: { flex: 1 },
 })

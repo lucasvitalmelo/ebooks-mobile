@@ -1,4 +1,4 @@
-import { byBookOrder, cfiSteps, compareCfi } from './cfi-order'
+import { byBookOrder, cfiSteps, compareCfi, containsCfi } from './cfi-order'
 
 test('lê os passos de um CFI simples e de um intervalo', () => {
   expect(cfiSteps('epubcfi(/6/4[cap2]!/4/2/1:12)')).toEqual([6, 4, 4, 2, 1, 12])
@@ -19,4 +19,25 @@ test('ordena na ordem do livro, empate pela criação', () => {
     { id: 'b', cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:5)', createdAt: 4 },
   ]
   expect(byBookOrder(items).map((h) => h.id)).toEqual(['a', 'b', 'c'])
+})
+
+test('diz se um CFI está entre o começo e o fim da página', () => {
+  const start = 'epubcfi(/6/4!/4/2/1:0)'
+  const end = 'epubcfi(/6/4!/4/8/1:40)'
+  expect(containsCfi(start, end, 'epubcfi(/6/4!/4/4/1:10)')).toBe(true)
+  expect(containsCfi(start, end, start)).toBe(true)
+  expect(containsCfi(start, end, end)).toBe(true)
+  expect(containsCfi(start, end, 'epubcfi(/6/4!/4/10/1:0)')).toBe(false)
+  expect(containsCfi(start, end, 'epubcfi(/6/2!/4/2/1:0)')).toBe(false)
+  expect(containsCfi(start, null, start)).toBe(true)
+  expect(containsCfi(start, null, 'epubcfi(/6/4!/4/4/1:10)')).toBe(false)
+})
+
+test('com a âncora no meio da página, conta o começo real da página', () => {
+  const pageStart = 'epubcfi(/6/4!/4/2/1:0)'
+  const anchor = 'epubcfi(/6/4!/4/6/1:0)'
+  const end = 'epubcfi(/6/4!/4/8/1:40)'
+  const origin = 'epubcfi(/6/4!/4/4/1:10)'
+  expect(containsCfi(anchor, end, origin)).toBe(false)
+  expect(containsCfi(pageStart, end, origin)).toBe(true)
 })

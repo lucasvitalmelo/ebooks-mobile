@@ -1,14 +1,19 @@
+import { BookOpen, X } from 'lucide-react-native'
 import { useState } from 'react'
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { Highlight } from '@/lib/db/highlights'
-import type { Chrome } from '@/lib/tone'
+import type { Palette } from '@/lib/palette'
 import type { TocEntry } from '@/reader/toc'
+import { UI_FONT } from '@/ui/fonts'
+
+export type NavigationTab = 'toc' | 'highlights'
 
 interface Props {
   visible: boolean
+  initialTab: NavigationTab
   onClose(): void
-  chrome: Chrome
+  palette: Palette
   toc: TocEntry[]
   currentIndex: number
   highlights: Highlight[]
@@ -16,98 +21,130 @@ interface Props {
   onRemoveHighlight(highlight: Highlight): void
 }
 
-type Tab = 'toc' | 'highlights'
-
-export function NavigationSheet({
-  visible,
-  onClose,
-  chrome,
-  toc,
-  currentIndex,
-  highlights,
-  onGoTo,
-  onRemoveHighlight,
-}: Props) {
-  const [tab, setTab] = useState<Tab>('toc')
-  const insets = useSafeAreaInsets()
+export function NavigationSheet(props: Props) {
+  const { visible, initialTab, onClose, palette, toc, currentIndex, highlights, onGoTo, onRemoveHighlight } = props
+  const [tab, setTab] = useState<NavigationTab>(initialTab)
+  // Cada abertura começa na aba pedida (o botão Anotações abre direto nela).
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    if (visible) setTab(initialTab)
+  }
 
   const go = (target: string) => {
     onGoTo(target)
     onClose()
   }
 
-  const tabButton = (value: Tab, label: string) => (
+  const confirmRemove = (highlight: Highlight) =>
+    Alert.alert('Remover grifo?', highlight.text.slice(0, 120), [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Remover', style: 'destructive', onPress: () => onRemoveHighlight(highlight) },
+    ])
+
+  const tabButton = (value: NavigationTab, label: string) => (
     <Pressable
       onPress={() => setTab(value)}
-      style={[styles.tab, tab === value && { borderBottomColor: chrome.text }]}
       accessibilityState={{ selected: tab === value }}
+      style={[styles.tab, tab === value && { backgroundColor: palette.background }]}
     >
-      <Text style={[styles.tabText, { color: tab === value ? chrome.text : chrome.muted }]}>{label}</Text>
+      <Text style={[styles.tabText, { color: tab === value ? palette.text : palette.muted }]}>{label}</Text>
     </Pressable>
   )
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { backgroundColor: chrome.surface, paddingBottom: 16 + insets.bottom }]}>
-        <View style={[styles.tabs, { borderBottomColor: chrome.border }]}>
-          {tabButton('toc', 'Sumário')}
-          {tabButton('highlights', `Grifos (${highlights.length})`)}
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={[styles.screen, { backgroundColor: palette.background }]}>
+        <View style={styles.header}>
+          <View style={[styles.segmented, { backgroundColor: palette.panel }]}>
+            {tabButton('toc', 'Sumário')}
+            {tabButton('highlights', 'Anotações')}
+          </View>
+          <Pressable accessibilityLabel="Fechar" onPress={onClose} style={styles.close}>
+            <X size={20} color={palette.text} />
+          </Pressable>
         </View>
         {tab === 'toc' ? (
           <FlatList
             data={toc}
             keyExtractor={(entry, index) => `${index}-${entry.href}`}
+            contentContainerStyle={styles.list}
             ListEmptyComponent={
-              <Text style={[styles.empty, { color: chrome.muted }]}>Este livro não tem sumário.</Text>
+              <Text style={[styles.empty, { color: palette.muted }]}>Este livro não tem sumário.</Text>
             }
-            renderItem={({ item, index }) => (
-              <Pressable onPress={() => go(item.href)} style={[styles.item, { paddingLeft: 16 + 16 * item.depth }]}>
-                <Text
-                  style={[styles.itemText, { color: chrome.text }, index === currentIndex && styles.current]}
-                  numberOfLines={2}
+            renderItem={({ item, index }) => {
+              const current = index === currentIndex
+              return (
+                <Pressable
+                  onPress={() => go(item.href)}
+                  style={[
+                    styles.item,
+                    current && { backgroundColor: palette.panel },
+                    item.depth > 0 && {
+                      marginLeft: 12 * item.depth,
+                      borderRadius: 0,
+                      borderLeftWidth: 1,
+                      borderLeftColor: palette.border,
+                    },
+                  ]}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
-            )}
+                  {current && <BookOpen size={14} color={palette.text} />}
+                  <Text
+                    style={[
+                      styles.itemText,
+                      { color: palette.text, fontFamily: current ? UI_FONT.semibold : UI_FONT.regular },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              )
+            }}
           />
         ) : (
           <FlatList
             data={highlights}
             keyExtractor={(highlight) => highlight.id}
+            contentContainerStyle={styles.list}
             ListEmptyComponent={
-              <Text style={[styles.empty, { color: chrome.muted }]}>
-                Nenhum grifo ainda. Toque longo no texto para grifar.
-              </Text>
+              <Text style={[styles.empty, { color: palette.muted }]}>Nenhum grifo neste livro ainda.</Text>
             }
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => go(item.cfiRange)}
-                onLongPress={() => onRemoveHighlight(item)}
-                style={[styles.item, { borderLeftColor: '#f5c400' }, styles.highlightItem]}
+                onLongPress={() => confirmRemove(item)}
+                style={[styles.highlight, { borderLeftColor: palette.highlight }]}
               >
-                <Text style={[styles.itemText, { color: chrome.text }]} numberOfLines={3}>
+                <Text style={[styles.itemText, { color: palette.text }]} numberOfLines={3}>
                   {item.text}
                 </Text>
               </Pressable>
             )}
           />
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
-  sheet: { maxHeight: '70%', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 8 },
-  tabs: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabText: { fontWeight: '600' },
-  item: { paddingVertical: 12, paddingRight: 16 },
-  highlightItem: { marginHorizontal: 16, marginVertical: 4, paddingLeft: 12, borderLeftWidth: 3 },
-  itemText: { fontSize: 15 },
-  current: { fontWeight: '700' },
-  empty: { padding: 24, textAlign: 'center' },
+  screen: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  segmented: { flex: 1, flexDirection: 'row', padding: 4, gap: 4, borderRadius: 10 },
+  tab: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  tabText: { fontSize: 14, fontFamily: UI_FONT.medium },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  list: { paddingHorizontal: 16, paddingBottom: 24 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  itemText: { flex: 1, fontSize: 14, fontFamily: UI_FONT.regular },
+  highlight: { marginVertical: 6, paddingVertical: 4, paddingLeft: 12, borderLeftWidth: 4 },
+  empty: { padding: 24, textAlign: 'center', fontFamily: UI_FONT.regular },
 })

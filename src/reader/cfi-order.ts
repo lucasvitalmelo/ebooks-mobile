@@ -28,3 +28,9 @@ export function compareCfi(a: string, b: string): number {
 export function byBookOrder<T extends { cfiRange: string; createdAt: number }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => compareCfi(a.cfiRange, b.cfiRange) || a.createdAt - b.createdAt)
 }
+
+// Sem o fim da página (ainda não veio), só o próprio começo conta como "na tela".
+export function containsCfi(start: string, end: string | null, cfi: string): boolean {
+  if (!end) return compareCfi(cfi, start) === 0
+  return compareCfi(cfi, start) >= 0 && compareCfi(cfi, end) <= 0
+}

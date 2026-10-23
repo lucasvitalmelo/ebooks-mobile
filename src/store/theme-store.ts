@@ -22,10 +22,12 @@ export type ThemePatch = Partial<ReaderTheme> | ((theme: Theme) => Partial<Reade
 interface ThemeState {
   themes: Theme[]
   active: Theme
+  keepAwake: boolean
   load(db: Db): Promise<void>
   select(db: Db, id: string): Promise<void>
   update(db: Db, patch: ThemePatch): Promise<void>
   remove(db: Db, id: string): Promise<void>
+  setKeepAwake(db: Db, value: boolean): Promise<void>
 }
 
 function uniqueId(themes: Theme[], base: string): string {
@@ -35,7 +37,7 @@ function uniqueId(themes: Theme[], base: string): string {
 }
 
 export function createThemeStore(now: () => number = Date.now) {
-  // Cada operação lê o estado e depois grava; toques seguidos em +/− as sobreporiam
+  // Cada operação lê o estado e depois grava; ajustes seguidos (sliders, paleta) as sobreporiam
   // (dois ajustes num tema pronto criariam duas cópias), então rodam uma de cada vez.
   let queue: Promise<unknown> = Promise.resolve()
   function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -47,12 +49,14 @@ export function createThemeStore(now: () => number = Date.now) {
   return createStore<ThemeState>()((set, get) => ({
     themes: PRESET_THEMES,
     active: PRESET_THEMES[0],
+    keepAwake: false,
 
     load: (db) =>
       serial(async () => {
         const themes = await listThemes(db)
         const activeId = (await getSetting(db, 'activeThemeId')) ?? DEFAULT_THEME_ID
-        set({ themes, active: themes.find((t) => t.id === activeId) ?? themes[0] })
+        const keepAwake = (await getSetting(db, 'keepAwake')) === '1'
+        set({ themes, active: themes.find((t) => t.id === activeId) ?? themes[0], keepAwake })
       }),
 
     select: (db, id) =>
@@ -98,6 +102,12 @@ export function createThemeStore(now: () => number = Date.now) {
         } else {
           set({ themes })
         }
+      }),
+
+    setKeepAwake: (db, value) =>
+      serial(async () => {
+        await setSetting(db, 'keepAwake', value ? '1' : '0')
+        set({ keepAwake: value })
       }),
   }))
 }

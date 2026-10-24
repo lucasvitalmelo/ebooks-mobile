@@ -77,6 +77,13 @@ const MIGRATIONS: ((db: Db) => Promise<void>)[] = [
       ],
     )
   },
+  async (db) => {
+    // Livros importados antes desta versão não passaram pela limpeza do CSS: prepared = 0.
+    await db.exec(`
+      ALTER TABLE books ADD COLUMN fontScale REAL;
+      ALTER TABLE books ADD COLUMN prepared INTEGER NOT NULL DEFAULT 0;
+    `)
+  },
 ]
 
 export async function migrate(db: Db): Promise<void> {

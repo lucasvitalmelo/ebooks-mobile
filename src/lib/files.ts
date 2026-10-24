@@ -19,9 +19,9 @@ export function readBase64(relativePath: string): Promise<string> {
   return fileAt(relativePath).base64()
 }
 
-export async function storeBook(id: string, sourceUri: string): Promise<void> {
+export async function storeBook(id: string, bytes: Uint8Array): Promise<void> {
   ensureDirectory('books')
-  await new File(sourceUri).copy(fileAt(bookPath(id)), { overwrite: true })
+  await writeBytes(bookPath(id), bytes)
 }
 
 export async function storeCover(id: string, bytes: Uint8Array, extension: string): Promise<void> {

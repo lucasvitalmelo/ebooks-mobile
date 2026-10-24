@@ -47,3 +47,7 @@ build.json
 # reader bundle (npm run reader:build)
 reader-web/dist/
 src/reader/bundle.generated.ts
+
+# PDF bundle (npm run pdf:build)
+pdf-web/dist/
+src/pdf/bundle.generated.ts

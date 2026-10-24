@@ -1,8 +1,10 @@
+import * as Crypto from 'expo-crypto'
 import * as DocumentPicker from 'expo-document-picker'
+import { File } from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import { router, useFocusEffect } from 'expo-router'
 import { Plus } from 'lucide-react-native'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +21,12 @@ import { BookCard } from '@/components/BookCard'
 import { BookMenu } from '@/components/BookMenu'
 import { ContinueCard } from '@/components/ContinueCard'
 import { EditBookSheet, type EditValues } from '@/components/EditBookSheet'
+import { PdfConverter, type PdfConverterHandle } from '@/components/PdfConverter'
 import { editBook } from '@/lib/edit-book'
+import { toHex } from '@/lib/epub/sha256'
+import { withLibraryLock } from '@/lib/library-lock'
+import { base64ToBytes, pdfToEpub } from '@/lib/pdf/convert'
+import { prepareLibrary } from '@/lib/prepare-library'
 import { ProtectedEpubError } from '@/lib/epub/edit'
 import { UNKNOWN_AUTHOR } from '@/lib/epub/parse'
 import { exportFileName } from '@/lib/epub/export-name'
@@ -45,6 +52,8 @@ import { UI_FONT } from '@/ui/fonts'
 
 type Cell = BookWithProgress | { id: '__add' }
 
+const TOAST_INTERVAL = 2500
+const FIXED_MODIFIED = '2000-01-01T00:00:00Z'
 const PADDING = 16
 const COLUMN_GAP = 16
 
@@ -60,6 +69,7 @@ export default function Library() {
   // A capa editada pode ficar no mesmo caminho: o contador força o Image a não usar a do cache.
   const [editCount, setEditCount] = useState(0)
   const busy = useRef(false)
+  const pdf = useRef<PdfConverterHandle>(null)
   // Largura fixa: a célula sozinha na última linha não estica para a linha inteira.
   const cellWidth = (useWindowDimensions().width - PADDING * 2 - COLUMN_GAP) / 2
 
@@ -70,7 +80,38 @@ export default function Library() {
     }, [reload]),
   )
 
-  const deps: ImportDeps = { db, readBytes, storeBook, storeCover, deleteFiles, discardPicked, now: Date.now }
+  useEffect(() => {
+    prepareLibrary({ db, readFile: readFileBytes, replaceFile: replaceBytes }).catch((error: unknown) =>
+      console.warn('Não foi possível limpar a biblioteca', error),
+    )
+  }, [db])
+
+  const deps: ImportDeps = {
+    db,
+    readBytes,
+    storeBook,
+    storeCover,
+    deleteFiles,
+    discardPicked,
+    now: Date.now,
+    convertPdf: async (uri, name) => {
+      const handle = pdf.current
+      if (!handle) throw new Error('Não foi possível converter o PDF')
+      const base64 = await new File(uri).base64()
+      let lastToast = 0
+      const result = await handle.convert(base64, (page, total) => {
+        // Um aviso a cada 2,5 s (mais a primeira e a última página), para não empilhar toasts.
+        const now = Date.now()
+        if (page === 1 || page === total || now - lastToast >= TOAST_INTERVAL) {
+          lastToast = now
+          ToastAndroid.show(`Convertendo PDF (página ${page} de ${total})`, ToastAndroid.SHORT)
+        }
+      })
+      // Identificador e data derivados do PDF: o mesmo PDF gera o mesmo EPUB e, portanto, o mesmo ID de livro.
+      const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, base64ToBytes(base64))
+      return pdfToEpub(result, name, `urn:sha256:${toHex(new Uint8Array(digest))}`, result.modified ?? FIXED_MODIFIED)
+    },
+  }
   const coverOf = (book: BookWithProgress) =>
     book.coverPath ? `${fileAt(book.coverPath).uri}${editCount ? `?v=${editCount}` : ''}` : null
   const open = (book: BookWithProgress) => router.push(`/book/${book.id}`)
@@ -85,9 +126,11 @@ export default function Library() {
       // application/octet-stream, e o filtro por tipo esconderia o arquivo.
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: true })
       if (result.canceled) return
-      const summary = await importBooks(
-        deps,
-        result.assets.map((asset) => ({ uri: asset.uri, name: asset.name })),
+      const summary = await withLibraryLock(() =>
+        importBooks(
+          deps,
+          result.assets.map((asset) => ({ uri: asset.uri, name: asset.name })),
+        ),
       )
       Alert.alert('Importação', formatSummary(summary))
       await reload()
@@ -121,11 +164,13 @@ export default function Library() {
         type: values.cover.type,
       }
       const editDeps = { db, readFile: readFileBytes, writeFile: writeBytes, replaceFile: replaceBytes, deleteFiles }
-      await editBook(editDeps, editing, {
-        title: values.title,
-        author: values.author,
-        cover,
-      })
+      await withLibraryLock(() =>
+        editBook(editDeps, editing, {
+          title: values.title,
+          author: values.author,
+          cover,
+        }),
+      )
       setEditing(null)
       setEditCount((count) => count + 1)
       ToastAndroid.show('Informações atualizadas', ToastAndroid.SHORT)
@@ -154,7 +199,7 @@ export default function Library() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await removeBook(deps, book)
+              await withLibraryLock(() => removeBook(deps, book))
             } catch (error) {
               console.error(error)
               ToastAndroid.show('Não foi possível remover o livro.', ToastAndroid.LONG)
@@ -202,7 +247,7 @@ export default function Library() {
           </View>
           <Text style={[styles.emptyTitle, { color: palette.text }]}>Adicionar seu primeiro EPUB</Text>
           <Text style={[styles.emptyText, { color: palette.muted }]}>
-            Escolha um ou mais arquivos .epub do seu aparelho.
+            Escolha um ou mais arquivos .epub ou .pdf do seu aparelho.
           </Text>
         </Pressable>
       ) : (
@@ -263,6 +308,7 @@ export default function Library() {
           if (book) confirmDelete(book)
         }}
       />
+      <PdfConverter ref={pdf} />
       {editing && (
         <EditBookSheet
           book={{

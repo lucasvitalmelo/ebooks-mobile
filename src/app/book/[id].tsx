@@ -26,7 +26,7 @@ import { Reader, type ReaderHandle } from '@/components/Reader'
 import { ReturnPill } from '@/components/ReturnPill'
 import { SearchSheet, type SearchState } from '@/components/SearchSheet'
 import { SelectionPopover } from '@/components/SelectionPopover'
-import { getBook, markOpened, saveLocations, type Book } from '@/lib/db/books'
+import { getBook, markOpened, saveLocations, setFontScale, type Book } from '@/lib/db/books'
 import { addHighlight, deleteHighlight, listHighlights, setHighlightNote, type Highlight } from '@/lib/db/highlights'
 import { getProgress, saveProgress } from '@/lib/db/progress'
 import { useDb } from '@/lib/db/provider'
@@ -246,6 +246,7 @@ export default function BookScreen() {
         cfi: progress?.cfi ?? null,
         locations: found.locations,
         highlights: rows.map(({ id: highlightId, cfiRange }) => ({ id: highlightId, cfiRange })),
+        fontScale: found.fontScale,
       })
       await markOpened(db, id, Date.now())
     } catch (e) {
@@ -300,6 +301,8 @@ export default function BookScreen() {
           return dispatch(event.ok ? { type: 'jumpSettled', showsOrigin: showsOrigin() } : { type: 'jumpFailed' })
         case 'locations':
           return saveLocations(db, id, event.data).catch(report('Não foi possível guardar as posições do livro.'))
+        case 'fontScale':
+          return setFontScale(db, id, event.value).catch(report('Não foi possível guardar a escala da fonte.'))
         case 'centerTap':
           // Com o cartão aberto, o toque fora só o fecha.
           if (popover) return setPopover(null)

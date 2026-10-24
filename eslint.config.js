@@ -6,5 +6,14 @@ const prettierConfig = require('eslint-config-prettier')
 module.exports = defineConfig([
   expoConfig,
   prettierConfig,
-  { ignores: ['dist/*', '.expo/*', 'reader-web/dist/*', 'src/reader/bundle.generated.ts'] },
+  {
+    ignores: [
+      'dist/*',
+      '.expo/*',
+      'reader-web/dist/*',
+      'src/reader/bundle.generated.ts',
+      'pdf-web/dist/*',
+      'src/pdf/bundle.generated.ts',
+    ],
+  },
 ])

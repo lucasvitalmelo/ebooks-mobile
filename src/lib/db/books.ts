@@ -10,9 +10,11 @@ export interface Book {
   locations: string | null
   addedAt: number
   lastOpenedAt: number | null
+  fontScale: number | null
+  prepared: number
 }
 
-export type NewBook = Omit<Book, 'locations' | 'lastOpenedAt'>
+export type NewBook = Omit<Book, 'locations' | 'lastOpenedAt' | 'fontScale' | 'prepared'>
 
 export function listBooks(db: Db): Promise<Book[]> {
   return db.getAll<Book>('SELECT * FROM books ORDER BY lastOpenedAt IS NULL, lastOpenedAt DESC, addedAt DESC')
@@ -24,9 +26,21 @@ export function getBook(db: Db, id: string): Promise<Book | null> {
 
 export async function insertBook(db: Db, book: NewBook): Promise<void> {
   await db.run(
-    'INSERT INTO books (id, title, author, filePath, coverPath, size, addedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO books (id, title, author, filePath, coverPath, size, addedAt, prepared) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
     [book.id, book.title, book.author, book.filePath, book.coverPath, book.size, book.addedAt],
   )
+}
+
+export function listUnprepared(db: Db): Promise<Book[]> {
+  return db.getAll<Book>('SELECT * FROM books WHERE prepared = 0 ORDER BY addedAt')
+}
+
+export async function markPrepared(db: Db, id: string): Promise<void> {
+  await db.run('UPDATE books SET prepared = 1 WHERE id = ?', [id])
+}
+
+export async function setFontScale(db: Db, id: string, value: number): Promise<void> {
+  await db.run('UPDATE books SET fontScale = ? WHERE id = ?', [value, id])
 }
 
 export async function markOpened(db: Db, id: string, at: number): Promise<void> {

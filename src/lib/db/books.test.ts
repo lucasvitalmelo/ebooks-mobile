@@ -4,8 +4,11 @@ import {
   insertBook,
   listBooks,
   listBooksWithProgress,
+  listUnprepared,
   markOpened,
+  markPrepared,
   saveLocations,
+  setFontScale,
   updateBookInfo,
   type NewBook,
 } from './books'
@@ -32,8 +35,25 @@ async function setup() {
 test('insere e lê de volta', async () => {
   const db = await setup()
   await insertBook(db, book('a', 1))
-  expect(await getBook(db, 'a')).toEqual({ ...book('a', 1), locations: null, lastOpenedAt: null })
+  expect(await getBook(db, 'a')).toEqual({
+    ...book('a', 1),
+    locations: null,
+    lastOpenedAt: null,
+    fontScale: null,
+    prepared: 1,
+  })
   expect(await getBook(db, 'x')).toBeNull()
+})
+
+test('livros a limpar, marcar limpo e guardar a escala', async () => {
+  const db = await setup()
+  await insertBook(db, book('a', 1))
+  await db.run("UPDATE books SET prepared = 0 WHERE id = 'a'")
+  expect((await listUnprepared(db)).map((b) => b.id)).toEqual(['a'])
+  await markPrepared(db, 'a')
+  expect(await listUnprepared(db)).toEqual([])
+  await setFontScale(db, 'a', 0.6)
+  expect((await getBook(db, 'a'))?.fontScale).toBe(0.6)
 })
 
 test('lista os abertos por último primeiro, depois os recém-adicionados', async () => {

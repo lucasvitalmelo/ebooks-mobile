@@ -31,6 +31,7 @@ async function setup() {
     writeFile: async (path, bytes) => void files.set(path, bytes),
     replaceFile: async (path, bytes) => void files.set(path, bytes),
     deleteFiles: (paths) => paths.forEach((p) => p && files.delete(p)),
+    now: () => 1000,
   }
   const book = (await getBook(db, 'b'))!
   return { db, deps, files, book }
@@ -57,6 +58,13 @@ test('reescreve o arquivo, atualiza o banco e a capa', async () => {
     coverPath: 'covers/b.png',
   })
   expect(files.get('books/b.epub')).not.toBe(fixture)
+})
+
+test('editar carimba o livro e marca para enviar ao Drive', async () => {
+  const { db, deps, book } = await setup()
+  await db.run("UPDATE books SET pendingUpload = 0 WHERE id = 'b'")
+  await editBook(deps, book, { title: 'Novo', author: 'Ana' })
+  expect(await getBook(db, 'b')).toMatchObject({ updatedAt: 1000, fileUpdatedAt: 1000, pendingUpload: 1 })
 })
 
 test('falha ao gravar a capa: o livro e o banco ficam como estavam', async () => {

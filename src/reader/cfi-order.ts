@@ -34,3 +34,13 @@ export function containsCfi(start: string, end: string | null, cfi: string): boo
   if (!end) return compareCfi(cfi, start) === 0
   return compareCfi(cfi, start) >= 0 && compareCfi(cfi, end) <= 0
 }
+
+// A página na tela ainda mostra a posição salva (o persistIfMoved do web): ao
+// abrir, ou num relayout, gravar de novo só carimbaria a mesma posição com a
+// hora de agora, e ela venceria um progresso mais novo de outro aparelho.
+export function showsSaved(
+  saved: string | null,
+  page: { cfi: string; startCfi: string | null; endCfi: string | null },
+): boolean {
+  return saved !== null && containsCfi(page.startCfi ?? page.cfi, page.endCfi, saved)
+}

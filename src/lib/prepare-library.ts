@@ -1,4 +1,4 @@
-import { getBook, listUnprepared, markPrepared } from './db/books'
+import { getBook, listUnprepared, markFileForUpload, markPrepared } from './db/books'
 import type { Db } from './db/db'
 import { prepareEpub } from './epub/prepare'
 import { withLibraryLock } from './library-lock'
@@ -20,7 +20,10 @@ export async function prepareLibrary(deps: PrepareDeps): Promise<void> {
       if (!book || book.filePath !== listed.filePath || book.prepared) return
       try {
         const { bytes, changed } = await prepareEpub(await deps.readFile(book.filePath))
-        if (changed) await deps.replaceFile(book.filePath, bytes)
+        if (changed) {
+          await deps.replaceFile(book.filePath, bytes)
+          await markFileForUpload(deps.db, book.id)
+        }
       } catch (error) {
         console.warn('Não foi possível limpar o livro', book.id, error)
       }

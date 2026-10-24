@@ -14,12 +14,16 @@ test('sem capa mostra título e autora com as cores do tema', async () => {
       percent={null}
       palette={palette}
       width={160}
+      cloud={false}
+      downloading={false}
       onPress={() => {}}
       onMenu={() => {}}
+      onDownload={() => {}}
     />,
   )
   expect(screen.getAllByText('O Relógio Parado da Sala').length).toBeGreaterThan(0)
   expect(screen.getByText('Joana Vieira')).toHaveStyle({ color: palette.muted })
+  expect(screen.queryByLabelText('Baixar')).toBeNull()
 })
 
 test('toque abre e o botão ⋮ chama o menu', async () => {
@@ -32,12 +36,37 @@ test('toque abre e o botão ⋮ chama o menu', async () => {
       percent={0.3}
       palette={palette}
       width={160}
+      cloud={false}
+      downloading={false}
       onPress={onPress}
       onMenu={onMenu}
+      onDownload={() => {}}
     />,
   )
   await fireEvent.press(screen.getByLabelText('O Relógio Parado da Sala'))
   await fireEvent.press(screen.getByLabelText('Opções de O Relógio Parado da Sala'))
   expect(onPress).toHaveBeenCalledTimes(1)
   expect(onMenu).toHaveBeenCalledTimes(1)
+})
+
+test('livro só no Drive mostra o botão de baixar', async () => {
+  const onDownload = jest.fn()
+  const onPress = jest.fn()
+  await render(
+    <BookCard
+      book={book}
+      coverUri={null}
+      percent={null}
+      palette={palette}
+      width={160}
+      cloud
+      downloading={false}
+      onPress={onPress}
+      onMenu={() => {}}
+      onDownload={onDownload}
+    />,
+  )
+  await fireEvent.press(screen.getByLabelText('Baixar'))
+  expect(onDownload).toHaveBeenCalledTimes(1)
+  expect(onPress).not.toHaveBeenCalled()
 })

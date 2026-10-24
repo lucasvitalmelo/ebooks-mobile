@@ -1,6 +1,6 @@
 # E-books (mobile)
 
-Leitor de EPUB pessoal para Android, em React Native (Expo). Porta do leitor web [leitor_epub](https://github.com/lucasvitalmelo/leitor_epub) — e projeto de estudo de desenvolvimento mobile. Tudo fica no aparelho: livros, progresso e temas.
+Leitor de EPUB pessoal para Android, em React Native (Expo). Porta do leitor web [leitor_epub](https://github.com/lucasvitalmelo/leitor_epub) — e projeto de estudo de desenvolvimento mobile. Tudo fica no aparelho (livros, progresso e temas), com sincronização opcional pelo Google Drive.
 
 ## Setup
 
@@ -19,9 +19,22 @@ npm run format         # Prettier (escreve)
 npm run format:check   # Prettier (só confere; roda no CI)
 npm run pdf:build      # recompila o bundle do conversor de PDF (pdf-web/)
 npm run pdf:generate   # regera fixtures/livro-de-teste.pdf
+npm run icons:generate # regera os PNGs do ícone a partir de assets/icon.svg
 ```
 
 `fixtures/livro-de-teste.epub` é copiado do leitor web (lá ele é gerado por `scripts/generate-test-epub.mjs`): 8 capítulos e notas, capa PNG, texto acentuado. Os testes do parser usam ele.
+
+## Google Drive
+
+Opcional: conectado, o app sincroniza livros, progresso, grifos e notas com o Google Drive. É a mesma biblioteca do leitor web (a pasta `MyBooks` e o `biblioteca.json`), então o que se lê num lado continua no outro. Os livros que estão só no Drive aparecem na aba "Disponíveis" e são baixados ao tocar.
+
+Configuração única no Google Cloud, no mesmo projeto do leitor web (o acesso `drive.file` vale por projeto):
+
+1. Credenciais → Criar credenciais → ID do cliente OAuth → Android.
+2. Pacote `com.lucasvitalmelo.ebooks` e o SHA-1 do keystore de produção da EAS (`eas credentials -p android`, ou expo.dev → projeto → Credentials → Android).
+3. Um build local de debug assina com outra chave: precisa de um segundo cliente Android com o SHA-1 da chave de debug.
+
+Sem esse cliente, o login no APK falha com `DEVELOPER_ERROR`. O Drive só funciona no APK: no Expo Go o app abre normalmente e o Drive aparece como indisponível.
 
 ## Fluxo de trabalho
 

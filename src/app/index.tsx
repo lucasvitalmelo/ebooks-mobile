@@ -50,7 +50,7 @@ import {
   writeBytes,
 } from '@/lib/files'
 import { formatSummary, importBooks, removeBook, type ImportDeps } from '@/lib/import'
-import { pickContinue } from '@/lib/library'
+import { libraryBooks, pickContinue } from '@/lib/library'
 import { paletteFor } from '@/lib/palette'
 import { needsDownload } from '@/lib/sync/book-file'
 import { downloadStore, syncStore, useDownloadStore, useDriveStore } from '@/store/sync'
@@ -69,7 +69,7 @@ export default function Library() {
   const theme = useThemeStore((s) => s.active)
   const palette = paletteFor(theme)
   const insets = useSafeAreaInsets()
-  const [books, setBooks] = useState<BookWithProgress[] | null>(null)
+  const [stored, setBooks] = useState<BookWithProgress[] | null>(null)
   const [importing, setImporting] = useState(false)
   const [menuBook, setMenuBook] = useState<BookWithProgress | null>(null)
   const [editing, setEditing] = useState<BookWithProgress | null>(null)
@@ -78,7 +78,9 @@ export default function Library() {
   const [editCount, setEditCount] = useState(0)
   const [driveOpen, setDriveOpen] = useState(false)
   const [shelf, setShelf] = useState<'baixados' | 'disponiveis'>('baixados')
-  const connected = useDriveStore((s) => s.status === 'conectado')
+  const driveStatus = useDriveStore((s) => s.status)
+  const connected = driveStatus === 'conectado'
+  const books = stored && libraryBooks(stored, driveStatus)
   const downloading = useDownloadStore((s) => s.downloading)
   const busy = useRef(false)
   const pdf = useRef<PdfConverterHandle>(null)

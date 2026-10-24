@@ -14,7 +14,7 @@ Expo + TypeScript · Expo Router · expo-sqlite · expo-file-system · react-nat
 
 ## Comandos
 
-npm start · npm test · npm run lint · npm run typecheck · npm run format:check · npx expo-doctor
+npm start · npm test · npm run lint · npm run typecheck · npm run format:check · npm run pdf:build · npx expo-doctor
 
 ## Regras que sobrepõem as globais
 

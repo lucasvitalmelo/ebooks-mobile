@@ -17,6 +17,8 @@ npm run lint           # ESLint
 npm run typecheck      # tsc --noEmit
 npm run format         # Prettier (escreve)
 npm run format:check   # Prettier (só confere; roda no CI)
+npm run pdf:build      # recompila o bundle do conversor de PDF (pdf-web/)
+npm run pdf:generate   # regera fixtures/livro-de-teste.pdf
 ```
 
 `fixtures/livro-de-teste.epub` é copiado do leitor web (lá ele é gerado por `scripts/generate-test-epub.mjs`): 8 capítulos e notas, capa PNG, texto acentuado. Os testes do parser usam ele.
@@ -32,6 +34,7 @@ Branches `main` (releases) e `develop` (integração); features em `feat/<nome>`
 - [x] Visual do leitor web e ponto de retorno
 - [x] Grifos e seleção de texto
 - [x] Busca, notas nos grifos, editar e exportar livro
+- [x] Importar PDF (convertido em EPUB) e limpeza do estilo dos livros
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)
 - [ ] iOS

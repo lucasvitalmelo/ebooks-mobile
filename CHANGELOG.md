@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.5.0...v0.6.0) (2026-10-24)
+
+
+### Funcionalidades
+
+* **app:** troca o ícone pelo livro aberto com a folha virando ([9f6a2c6](https://github.com/lucasvitalmelo/ebooks-mobile/commit/9f6a2c6f0afaedea98d0dcc1092751b8273176a5))
+* **db:** carimbos, exclusões e cor do grifo para sincronizar com o Drive ([7d42979](https://github.com/lucasvitalmelo/ebooks-mobile/commit/7d4297926370b07bb701fe0aa25a70d7dcccba1c))
+* **library:** carimba edições e aceita livro do Drive reimportado ([8dc92a7](https://github.com/lucasvitalmelo/ebooks-mobile/commit/8dc92a7fa9131f4fac576a7203778259a98cd60d))
+* **library:** Drive na biblioteca, no leitor e sincronização automática ([9617855](https://github.com/lucasvitalmelo/ebooks-mobile/commit/9617855058a8d51975aebd57664d0b04745fbcb7))
+* **sync:** estado do Drive, da sincronização e dos downloads ([190f4d8](https://github.com/lucasvitalmelo/ebooks-mobile/commit/190f4d88316704f42b9692f74eae0b6c2972a7f7))
+* **sync:** porta a sincronização do leitor web e o login do Google ([ca55684](https://github.com/lucasvitalmelo/ebooks-mobile/commit/ca55684c06fde1434566890284590f20101f6071))
+
+
+### Documentação
+
+* registra as decisões da v0.6 ([01672f3](https://github.com/lucasvitalmelo/ebooks-mobile/commit/01672f3ff59b576d00012d1ad16bda04569465fa))
+
 ## [0.5.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.4.0...v0.5.0) (2026-10-24)
 
 

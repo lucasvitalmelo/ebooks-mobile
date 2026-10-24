@@ -1,5 +1,5 @@
 import { insertBook } from './books'
-import { addHighlight, deleteHighlight, listHighlights } from './highlights'
+import { addHighlight, deleteHighlight, listHighlights, setHighlightNote } from './highlights'
 import { migrate } from './migrations'
 import { openTestDb } from './testing/node-db'
 
@@ -37,6 +37,7 @@ test('grava, lista na ordem do livro e apaga', async () => {
     text: 'antes',
     createdAt: 2,
     updatedAt: 2,
+    note: null,
   })
   await deleteHighlight(db, 'h1')
   expect((await listHighlights(db, 'b')).map((h) => h.id)).toEqual(['h2'])
@@ -55,4 +56,13 @@ test('lista só os grifos do livro pedido', async () => {
   })
   await addHighlight(db, { id: 'h', bookId: 'c', cfiRange: 'epubcfi(/6/2)', text: 'x', createdAt: 1 })
   expect(await listHighlights(db, 'b')).toEqual([])
+})
+
+test('nota: grava sem espaços nas pontas e vazia apaga', async () => {
+  const db = await setup()
+  await addHighlight(db, { id: 'h', bookId: 'b', cfiRange: 'epubcfi(/6/2)', text: 'x', createdAt: 1 })
+  await setHighlightNote(db, 'h', '  minha nota  ', 5)
+  expect((await listHighlights(db, 'b'))[0]).toMatchObject({ note: 'minha nota', updatedAt: 5 })
+  await setHighlightNote(db, 'h', '   ', 6)
+  expect((await listHighlights(db, 'b'))[0]).toMatchObject({ note: null, updatedAt: 6 })
 })

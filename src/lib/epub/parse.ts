@@ -40,6 +40,8 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/svg+xml': 'svg',
 }
 
+export const UNKNOWN_AUTHOR = 'Autor desconhecido'
+
 export async function parseEpub(bytes: Uint8Array, fileName: string): Promise<ParsedEpub> {
   try {
     return await readEpub(bytes, fileName)
@@ -96,7 +98,7 @@ async function readEpub(bytes: Uint8Array, fileName: string): Promise<ParsedEpub
 
   return {
     title: main?.['#text']?.trim() || fileName.replace(/\.epub$/i, ''),
-    author: authors.join(' & ') || 'Autor desconhecido',
+    author: authors.join(' & ') || UNKNOWN_AUTHOR,
     cover: await readCover(zip, opfPath, items, metas),
   }
 }

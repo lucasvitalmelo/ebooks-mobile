@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.4.0...v0.5.0) (2026-10-24)
+
+
+### Funcionalidades
+
+* **epub:** limpa as folhas de estilo do livro na importação ([478177b](https://github.com/lucasvitalmelo/ebooks-mobile/commit/478177bac62231ae247fcbf8a2ed9d204ccc4318))
+* **import:** converte o texto de um PDF em EPUB ([3e72185](https://github.com/lucasvitalmelo/ebooks-mobile/commit/3e72185803fc47569d35374c88ca82187995350a))
+* **import:** importa PDF e guarda os livros já limpos ([0e707dc](https://github.com/lucasvitalmelo/ebooks-mobile/commit/0e707dc7fe0645f4c058eb3b380f0ae13421234b))
+* **import:** lê PDFs com o pdf.js numa WebView escondida ([2ef17f7](https://github.com/lucasvitalmelo/ebooks-mobile/commit/2ef17f75ca4e93257dc9320b0b017b50286945f4))
+* **library:** limpa uma vez os livros importados antes ([31b8cf8](https://github.com/lucasvitalmelo/ebooks-mobile/commit/31b8cf87af964cf8b88d60c6db3ae309a6ae2dd3))
+* **reader:** mede e aplica a escala da fonte de cada livro ([cf3655c](https://github.com/lucasvitalmelo/ebooks-mobile/commit/cf3655cf43460a4e1e45e99e2630704c4a81684e))
+
+
+### Documentação
+
+* registra as decisões da v0.5 ([6fd743f](https://github.com/lucasvitalmelo/ebooks-mobile/commit/6fd743f14c5b7ede38a231e2ebfc59e6efd1d9fc))
+
 ## [0.4.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.3.0...v0.4.0) (2026-10-24)
 
 

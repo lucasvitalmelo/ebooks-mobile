@@ -57,6 +57,19 @@ test('limpa os livros que faltam e marca todos', async () => {
   expect(await listUnprepared(db)).toEqual([])
 })
 
+test('um livro reescrito pela limpeza volta a subir para o Drive, sem carimbar uma edição', async () => {
+  const files = new Map([
+    ['books/a.epub', await dirtyEpub()],
+    ['books/b.epub', await epubWithCss('p { margin: 0 }')],
+  ])
+  const { db, deps } = await setup(files)
+  await db.exec("UPDATE books SET pendingUpload = 0, driveFileId = 'f'")
+  const before = await getBook(db, 'a')
+  await prepareLibrary(deps)
+  expect(await getBook(db, 'a')).toMatchObject({ pendingUpload: 1, updatedAt: before!.updatedAt })
+  expect(await getBook(db, 'b')).toMatchObject({ pendingUpload: 0 })
+})
+
 test('um livro removido entre a listagem e o processamento não é recriado', async () => {
   const files = new Map([
     ['books/a.epub', await dirtyEpub()],

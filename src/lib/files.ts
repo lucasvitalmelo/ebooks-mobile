@@ -39,8 +39,9 @@ export async function writeBytes(relativePath: string, bytes: Uint8Array): Promi
 
 // Escreve ao lado e só então troca: o `create` com overwrite trunca o arquivo, e
 // uma falha no meio da escrita deixaria o livro pela metade no lugar do original.
+// O nome temporário é único: duas trocas do mesmo arquivo ao mesmo tempo não escrevem uma no meio da outra.
 export async function replaceBytes(relativePath: string, bytes: Uint8Array): Promise<void> {
-  const temporary = fileAt(`${relativePath}.tmp`)
+  const temporary = fileAt(`${relativePath}.${Math.random().toString(36).slice(2)}.tmp`)
   temporary.create({ overwrite: true, intermediates: true })
   try {
     await temporary.write(bytes)

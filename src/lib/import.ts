@@ -1,4 +1,4 @@
-import { deleteBook, getBook, insertBook, type Book } from './db/books'
+import { deleteBook, getBook, hasLocalFile, insertBook, saveDownloadedFile, type Book } from './db/books'
 import { bookPath, coverPath } from './book-paths'
 import type { Db } from './db/db'
 import { bookIdFor } from './epub/book-id'
@@ -44,8 +44,18 @@ export async function importBooks(deps: ImportDeps, files: PickedFile[]): Promis
       }
       const parsed = await parseEpub(bytes, file.name)
       const id = bookIdFor(bytes)
-      if (await getBook(deps.db, id)) {
-        summary.duplicates.push(parsed.title)
+      const existing = await getBook(deps.db, id)
+      if (existing) {
+        // Só no Drive e nunca editado: este arquivo é o mesmo livro, e fica aqui
+        // no lugar de um download.
+        if (!hasLocalFile(existing) && existing.fileUpdatedAt === existing.addedAt) {
+          const prepared = (await prepareEpub(bytes)).bytes
+          await deps.storeBook(id, prepared)
+          await saveDownloadedFile(deps.db, id, existing.fileUpdatedAt, prepared.length)
+          summary.imported.push(parsed.title)
+        } else {
+          summary.duplicates.push(parsed.title)
+        }
         continue
       }
       const stored: string[] = []
@@ -84,8 +94,8 @@ export async function importBooks(deps: ImportDeps, files: PickedFile[]): Promis
   return summary
 }
 
-export async function removeBook(deps: Pick<ImportDeps, 'db' | 'deleteFiles'>, book: Book): Promise<void> {
-  await deleteBook(deps.db, book.id)
+export async function removeBook(deps: Pick<ImportDeps, 'db' | 'deleteFiles' | 'now'>, book: Book): Promise<void> {
+  await deleteBook(deps.db, book.id, deps.now())
   deps.deleteFiles([book.filePath, book.coverPath])
 }
 

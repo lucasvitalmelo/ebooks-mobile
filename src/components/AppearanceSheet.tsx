@@ -3,6 +3,7 @@ import { Check, ChevronDown, X } from 'lucide-react-native'
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LightControls } from '@/components/LightControls'
 import { WarmthOverlay } from '@/components/WarmthOverlay'
 import { useDb } from '@/lib/db/provider'
 import { paletteFor } from '@/lib/palette'
@@ -26,12 +27,10 @@ export function AppearanceSheet({ visible, onClose }: Props) {
   const themes = useThemeStore((s) => s.themes)
   const active = useThemeStore((s) => s.active)
   const keepAwake = useThemeStore((s) => s.keepAwake)
-  const warmth = useThemeStore((s) => s.warmth)
-  const draftWarmth = useThemeStore((s) => s.warmthPreview)
   const insets = useSafeAreaInsets()
   const palette = paletteFor(active)
   const [fontsOpen, setFontsOpen] = useState(false)
-  const { select, update, remove, setKeepAwake, setWarmth, setWarmthPreview } = themeStore.getState()
+  const { select, update, remove, setKeepAwake } = themeStore.getState()
 
   function confirmRemove(id: string, name: string) {
     Alert.alert('Apagar tema', `Apagar "${name}"?`, [
@@ -137,24 +136,7 @@ export function AppearanceSheet({ visible, onClose }: Props) {
             {label(`Margem (${shown('margin')}px)`)}
             {slider('margin')}
           </View>
-          <View style={styles.group}>
-            {label(`Temperatura da luz (${draftWarmth ?? warmth}%)`)}
-            <Slider
-              minimumValue={0}
-              maximumValue={100}
-              step={5}
-              value={warmth}
-              minimumTrackTintColor={palette.fill}
-              maximumTrackTintColor={palette.track}
-              thumbTintColor={palette.primary}
-              onValueChange={(value) => setWarmthPreview(Math.round(value))}
-              onSlidingComplete={(value) =>
-                setWarmth(db, Math.round(value))
-                  .catch(report)
-                  .finally(() => setWarmthPreview(null))
-              }
-            />
-          </View>
+          <LightControls palette={palette} />
           <View style={styles.row}>
             <Text style={[styles.value, styles.rowLabel, { color: palette.text }]}>
               Manter a tela acesa durante a leitura

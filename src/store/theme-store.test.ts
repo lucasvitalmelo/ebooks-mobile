@@ -145,3 +145,25 @@ test('temperatura começa em 0, grava e recarrega', async () => {
   await again.getState().load(db)
   expect(again.getState().warmth).toBe(40)
 })
+
+test('brilho começa no do sistema e lembra o escolhido', async () => {
+  const { db, store } = await setup()
+  expect(store.getState().brightness).toBeNull()
+  await store.getState().setBrightness(db, 30)
+  expect(store.getState().brightness).toBe(30)
+  expect(await getSetting(db, 'brightness')).toBe('30')
+  await store.getState().setBrightness(db, null)
+  expect(await getSetting(db, 'brightness')).toBe('system')
+  const again = createThemeStore(() => 1)
+  await again.getState().load(db)
+  expect(again.getState().brightness).toBeNull()
+})
+
+test('sincronizar durante a leitura começa ligado', async () => {
+  const { db, store } = await setup()
+  expect(store.getState().syncWhileReading).toBe(true)
+  await store.getState().setSyncWhileReading(db, false)
+  const again = createThemeStore(() => 1)
+  await again.getState().load(db)
+  expect(again.getState().syncWhileReading).toBe(false)
+})

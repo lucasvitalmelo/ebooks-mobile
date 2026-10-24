@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { ArrowLeft, List, NotebookPen, Settings2 } from 'lucide-react-native'
+import { ArrowLeft, List, Search, Settings2 } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Animated,
@@ -20,12 +20,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppearanceSheet } from '@/components/AppearanceSheet'
 import { NavigationSheet, type NavigationTab } from '@/components/NavigationSheet'
+import { NoteEditor } from '@/components/NoteEditor'
 import { ProgressBar } from '@/components/ProgressBar'
 import { Reader, type ReaderHandle } from '@/components/Reader'
 import { ReturnPill } from '@/components/ReturnPill'
+import { SearchSheet, type SearchState } from '@/components/SearchSheet'
 import { SelectionPopover } from '@/components/SelectionPopover'
 import { getBook, markOpened, saveLocations, type Book } from '@/lib/db/books'
-import { addHighlight, deleteHighlight, listHighlights, type Highlight } from '@/lib/db/highlights'
+import { addHighlight, deleteHighlight, listHighlights, setHighlightNote, type Highlight } from '@/lib/db/highlights'
 import { getProgress, saveProgress } from '@/lib/db/progress'
 import { useDb } from '@/lib/db/provider'
 import { toReaderTheme } from '@/lib/db/themes'
@@ -52,6 +54,13 @@ const KEEP_AWAKE_TAG = 'reader'
 type Popover =
   | { mode: 'selection'; cfiRange: string; text: string; rect: Rect }
   | { mode: 'highlight'; highlight: Highlight; rect: Rect }
+
+interface NoteTarget {
+  highlightId: string | null
+  cfiRange: string
+  text: string
+  note: string | null
+}
 
 interface Position {
   // A âncora; o começo real da página é `startCfi` (após um goTo a âncora fica no meio dela).
@@ -86,6 +95,12 @@ export default function BookScreen() {
   const [currentHref, setCurrentHref] = useState<string | null>(null)
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [popover, setPopover] = useState<Popover | null>(null)
+  const [noteFor, setNoteFor] = useState<NoteTarget | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [search, setSearch] = useState<SearchState>({ query: '', results: [] })
+  // Só a resposta da última busca vale: uma resposta atrasada de outra não sobrescreve.
+  const searchId = useRef(0)
+  const searchQuery = useRef('')
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [checkpoint, setCheckpoint] = useState<CheckpointState>(IDLE_CHECKPOINT)
   const checkpointRef = useRef<CheckpointState>(IDLE_CHECKPOINT)
@@ -174,6 +189,14 @@ export default function BookScreen() {
     },
     [startJump],
   )
+
+  // A busca vazia cancela a anterior; repetida, não tem o que cancelar.
+  const runSearch = useCallback((query: string) => {
+    if (!query && !searchQuery.current) return
+    searchId.current += 1
+    searchQuery.current = query
+    reader.current?.send({ type: 'search', id: searchId.current, query })
+  }, [])
 
   // O sistema pode matar o app em segundo plano sem avisar: grava na hora.
   useEffect(() => {
@@ -296,6 +319,9 @@ export default function BookScreen() {
           if (highlight) setPopover({ mode: 'highlight', highlight, rect: event.rect })
           return
         }
+        case 'searchResults':
+          if (event.id === searchId.current) setSearch({ query: searchQuery.current, results: event.results })
+          return
         case 'error':
           return setError(event.message)
       }
@@ -303,13 +329,14 @@ export default function BookScreen() {
     [db, id, open, queueSave, dispatch, startJump, showsOrigin, highlights, popover],
   )
 
-  async function onHighlight() {
+  async function onHighlight(): Promise<Highlight | null> {
     const current = popover
-    if (current?.mode !== 'selection') return
+    if (current?.mode !== 'selection') return null
     setPopover(null)
     if (highlights.some((h) => h.cfiRange === current.cfiRange)) {
       ToastAndroid.show('Esse trecho já está grifado', ToastAndroid.SHORT)
-      return reader.current?.send({ type: 'clearSelection' })
+      reader.current?.send({ type: 'clearSelection' })
+      return null
     }
     const highlight: Highlight = {
       id: Crypto.randomUUID(),
@@ -318,14 +345,54 @@ export default function BookScreen() {
       text: current.text,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      note: null,
     }
     try {
       await addHighlight(db, highlight)
       reader.current?.send({ type: 'addHighlight', id: highlight.id, cfiRange: highlight.cfiRange })
       setHighlights((list) => byBookOrder([...list, highlight]))
       ToastAndroid.show('Grifo salvo', ToastAndroid.SHORT)
+      return highlight
     } catch (e) {
       report('Não foi possível salvar o grifo.')(e)
+      return null
+    }
+  }
+
+  const editNote = (highlight: Highlight) =>
+    setNoteFor({ highlightId: highlight.id, cfiRange: highlight.cfiRange, text: highlight.text, note: highlight.note })
+
+  // No modo seleção, "Grifar com nota": grifa como o Grifar e abre o editor no grifo
+  // novo; num trecho já grifado, abre o editor no grifo que existe.
+  async function onNote() {
+    const current = popover
+    if (!current) return
+    const existing =
+      current.mode === 'highlight'
+        ? (highlights.find((h) => h.id === current.highlight.id) ?? current.highlight)
+        : highlights.find((h) => h.cfiRange === current.cfiRange)
+    if (existing) {
+      setPopover(null)
+      if (current.mode === 'selection') reader.current?.send({ type: 'clearSelection' })
+      return editNote(existing)
+    }
+    const created = await onHighlight()
+    if (created) editNote(created)
+  }
+
+  async function saveNote(text: string) {
+    const target = noteFor
+    if (!target?.highlightId) return setNoteFor(null)
+    try {
+      await setHighlightNote(db, target.highlightId, text, Date.now())
+      const note = text.trim() || null
+      setHighlights((list) =>
+        list.map((h) => (h.id === target.highlightId ? { ...h, note, updatedAt: Date.now() } : h)),
+      )
+      ToastAndroid.show(note ? 'Nota salva' : 'Nota apagada', ToastAndroid.SHORT)
+      setNoteFor(null)
+    } catch (e) {
+      report('Não foi possível salvar a nota')(e)
     }
   }
 
@@ -398,6 +465,7 @@ export default function BookScreen() {
             palette={palette}
             onCopy={onCopy}
             onHighlight={onHighlight}
+            onNote={onNote}
             onRemove={onRemove}
           />
         )}
@@ -437,9 +505,9 @@ export default function BookScreen() {
           )}
         </View>
         <Animated.View pointerEvents={pointerEvents} style={[styles.footerSide, { opacity: barsOpacity }]}>
-          <Pressable onPress={() => setNav('highlights')} style={styles.footerButton}>
-            <NotebookPen size={20} color={palette.text} />
-            <Text style={[styles.footerLabel, { color: palette.text }]}>Anotações</Text>
+          <Pressable onPress={() => setSearchOpen(true)} style={styles.footerButton}>
+            <Search size={20} color={palette.text} />
+            <Text style={[styles.footerLabel, { color: palette.text }]}>Buscar</Text>
           </Pressable>
         </Animated.View>
       </View>
@@ -454,7 +522,25 @@ export default function BookScreen() {
         highlights={highlights}
         onGoTo={jumpTo}
         onRemoveHighlight={(highlight) => void removeHighlight(highlight)}
+        onEditNote={editNote}
       />
+      <SearchSheet
+        visible={searchOpen}
+        palette={palette}
+        search={search}
+        onSearch={runSearch}
+        onGoTo={jumpTo}
+        onClose={() => setSearchOpen(false)}
+      />
+      {noteFor && (
+        <NoteEditor
+          excerpt={noteFor.text}
+          note={noteFor.note}
+          palette={palette}
+          onSave={saveNote}
+          onCancel={() => setNoteFor(null)}
+        />
+      )}
     </SafeAreaView>
   )
 }

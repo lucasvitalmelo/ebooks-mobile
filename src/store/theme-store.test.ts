@@ -136,3 +136,12 @@ test('tela acesa começa desligada, grava e recarrega', async () => {
   await again.getState().load(db)
   expect(again.getState().keepAwake).toBe(true)
 })
+
+test('temperatura começa em 0, grava e recarrega', async () => {
+  const { db, store } = await setup()
+  expect(store.getState().warmth).toBe(0)
+  await store.getState().setWarmth(db, 40)
+  const again = createThemeStore(() => 1)
+  await again.getState().load(db)
+  expect(again.getState().warmth).toBe(40)
+})

@@ -228,3 +228,28 @@ test('eventos da v0.3', () => {
   })
   expect(parseEvent(JSON.stringify({ type: 'highlightTap', id: 'h' }))).toBeNull()
 })
+
+test('busca', () => {
+  expect(parseCommand(JSON.stringify({ type: 'search', id: 3, query: 'relógio' }))).toEqual({
+    type: 'search',
+    id: 3,
+    query: 'relógio',
+  })
+  expect(parseCommand(JSON.stringify({ type: 'search', id: '3', query: 'x' }))).toBeNull()
+  const results = [{ cfi: 'epubcfi(/6/2)', excerpt: '...o relógio...', chapterLabel: 'C1' }]
+  expect(parseEvent(JSON.stringify({ type: 'searchResults', id: 3, results }))).toEqual({
+    type: 'searchResults',
+    id: 3,
+    results,
+  })
+  expect(
+    parseEvent(
+      JSON.stringify({ type: 'searchResults', id: 3, results: [{ cfi: 'x', excerpt: 'y', chapterLabel: null }] }),
+    ),
+  ).toEqual({
+    type: 'searchResults',
+    id: 3,
+    results: [{ cfi: 'x', excerpt: 'y', chapterLabel: null }],
+  })
+  expect(parseEvent(JSON.stringify({ type: 'searchResults', id: 3, results: [{ cfi: 'x' }] }))).toBeNull()
+})

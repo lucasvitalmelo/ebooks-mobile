@@ -31,6 +31,7 @@ Branches `main` (releases) e `develop` (integração); features em `feat/<nome>`
 - [x] Sumário e navegação por capítulos
 - [x] Visual do leitor web e ponto de retorno
 - [x] Grifos e seleção de texto
+- [x] Busca, notas nos grifos, editar e exportar livro
 - [ ] Login Google e sync com o Drive
 - [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)
 - [ ] iOS

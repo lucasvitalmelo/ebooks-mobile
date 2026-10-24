@@ -9,7 +9,7 @@ test('classifica fundos escuros e claros', () => {
 })
 
 test('todos os temas prontos: só o Escuro é escuro', () => {
-  expect(PRESET_THEMES.filter((t) => isDark(t.background)).map((t) => t.id)).toEqual(['preset-escuro'])
+  expect(PRESET_THEMES.filter((t) => isDark(t.background)).map((t) => t.id)).toEqual(['preset-escuro', 'preset-preto'])
 })
 
 test('cor inválida conta como clara', () => {

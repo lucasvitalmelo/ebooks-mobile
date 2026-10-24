@@ -6,6 +6,7 @@ import {
   listBooksWithProgress,
   markOpened,
   saveLocations,
+  updateBookInfo,
   type NewBook,
 } from './books'
 import { migrate } from './migrations'
@@ -66,4 +67,17 @@ test('lista com o progresso de cada livro', async () => {
     ['a', 0.42],
     ['b', null],
   ])
+})
+
+test('atualiza título, autor e capa sem mudar o resto', async () => {
+  const db = await setup()
+  await insertBook(db, book('a', 1))
+  await updateBookInfo(db, 'a', { title: 'Novo', author: 'Ana & Bia', coverPath: 'covers/a.jpg' })
+  expect(await getBook(db, 'a')).toMatchObject({
+    id: 'a',
+    title: 'Novo',
+    author: 'Ana & Bia',
+    coverPath: 'covers/a.jpg',
+    addedAt: 1,
+  })
 })

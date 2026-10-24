@@ -49,3 +49,16 @@ export function listBooksWithProgress(db: Db): Promise<BookWithProgress[]> {
      ORDER BY b.lastOpenedAt IS NULL, b.lastOpenedAt DESC, b.addedAt DESC`,
   )
 }
+
+export async function updateBookInfo(
+  db: Db,
+  id: string,
+  info: { title: string; author: string; coverPath: string | null },
+): Promise<void> {
+  await db.run('UPDATE books SET title = ?, author = ?, coverPath = ? WHERE id = ?', [
+    info.title,
+    info.author,
+    info.coverPath,
+    id,
+  ])
+}

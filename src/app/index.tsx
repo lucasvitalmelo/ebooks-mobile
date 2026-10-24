@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker'
+import * as Sharing from 'expo-sharing'
 import { router, useFocusEffect } from 'expo-router'
 import { Plus } from 'lucide-react-native'
 import { useCallback, useRef, useState } from 'react'
@@ -15,10 +16,27 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { BookCard } from '@/components/BookCard'
+import { BookMenu } from '@/components/BookMenu'
 import { ContinueCard } from '@/components/ContinueCard'
+import { EditBookSheet, type EditValues } from '@/components/EditBookSheet'
+import { editBook } from '@/lib/edit-book'
+import { ProtectedEpubError } from '@/lib/epub/edit'
+import { UNKNOWN_AUTHOR } from '@/lib/epub/parse'
+import { exportFileName } from '@/lib/epub/export-name'
 import { listBooksWithProgress, type BookWithProgress } from '@/lib/db/books'
 import { useDb } from '@/lib/db/provider'
-import { deleteFiles, discardPicked, fileAt, readBytes, storeBook, storeCover } from '@/lib/files'
+import {
+  copyForExport,
+  deleteFiles,
+  discardPicked,
+  fileAt,
+  readBytes,
+  readFileBytes,
+  replaceBytes,
+  storeBook,
+  storeCover,
+  writeBytes,
+} from '@/lib/files'
 import { formatSummary, importBooks, removeBook, type ImportDeps } from '@/lib/import'
 import { pickContinue } from '@/lib/library'
 import { paletteFor } from '@/lib/palette'
@@ -36,6 +54,11 @@ export default function Library() {
   const palette = paletteFor(theme)
   const [books, setBooks] = useState<BookWithProgress[] | null>(null)
   const [importing, setImporting] = useState(false)
+  const [menuBook, setMenuBook] = useState<BookWithProgress | null>(null)
+  const [editing, setEditing] = useState<BookWithProgress | null>(null)
+  const [saving, setSaving] = useState(false)
+  // A capa editada pode ficar no mesmo caminho: o contador força o Image a não usar a do cache.
+  const [editCount, setEditCount] = useState(0)
   const busy = useRef(false)
   // Largura fixa: a célula sozinha na última linha não estica para a linha inteira.
   const cellWidth = (useWindowDimensions().width - PADDING * 2 - COLUMN_GAP) / 2
@@ -48,7 +71,8 @@ export default function Library() {
   )
 
   const deps: ImportDeps = { db, readBytes, storeBook, storeCover, deleteFiles, discardPicked, now: Date.now }
-  const coverOf = (book: BookWithProgress) => (book.coverPath ? fileAt(book.coverPath).uri : null)
+  const coverOf = (book: BookWithProgress) =>
+    book.coverPath ? `${fileAt(book.coverPath).uri}${editCount ? `?v=${editCount}` : ''}` : null
   const open = (book: BookWithProgress) => router.push(`/book/${book.id}`)
 
   async function onImport() {
@@ -76,7 +100,50 @@ export default function Library() {
     }
   }
 
-  function onMenu(book: BookWithProgress) {
+  async function exportBook(book: BookWithProgress) {
+    try {
+      const uri = await copyForExport(book.filePath, exportFileName(book))
+      await Sharing.shareAsync(uri, { mimeType: 'application/epub+zip', dialogTitle: 'Exportar livro' })
+    } catch (error) {
+      console.error(error)
+      ToastAndroid.show('Não foi possível exportar o livro.', ToastAndroid.LONG)
+    }
+  }
+
+  async function saveEdit(values: EditValues) {
+    if (!editing) return
+    setSaving(true)
+    try {
+      const cover = values.cover && {
+        bytes: await readBytes(values.cover.uri),
+        width: values.cover.width,
+        height: values.cover.height,
+        type: values.cover.type,
+      }
+      const editDeps = { db, readFile: readFileBytes, writeFile: writeBytes, replaceFile: replaceBytes, deleteFiles }
+      await editBook(editDeps, editing, {
+        title: values.title,
+        author: values.author,
+        cover,
+      })
+      setEditing(null)
+      setEditCount((count) => count + 1)
+      ToastAndroid.show('Informações atualizadas', ToastAndroid.SHORT)
+      await reload()
+    } catch (error) {
+      console.error(error)
+      ToastAndroid.show(
+        error instanceof ProtectedEpubError
+          ? 'Este livro tem proteção contra cópia (DRM) e não pode ser editado.'
+          : 'Não foi possível salvar as alterações. O arquivo do livro não foi modificado.',
+        ToastAndroid.LONG,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function confirmDelete(book: BookWithProgress) {
     Alert.alert(
       `Remover "${book.title}"?`,
       'O arquivo e o progresso de leitura salvo serão removidos permanentemente. Essa ação não pode ser desfeita.',
@@ -167,7 +234,7 @@ export default function Library() {
                 palette={palette}
                 width={cellWidth}
                 onPress={() => open(item)}
-                onMenu={() => onMenu(item)}
+                onMenu={() => setMenuBook(item)}
               />
             ) : (
               <Pressable
@@ -180,6 +247,36 @@ export default function Library() {
               </Pressable>
             )
           }
+        />
+      )}
+      <BookMenu
+        title={menuBook?.title ?? null}
+        palette={palette}
+        onClose={() => setMenuBook(null)}
+        onEdit={() => setEditing(menuBook)}
+        onExport={() => {
+          const book = menuBook
+          if (book) void exportBook(book)
+        }}
+        onDelete={() => {
+          const book = menuBook
+          if (book) confirmDelete(book)
+        }}
+      />
+      {editing && (
+        <EditBookSheet
+          book={{
+            title: editing.title,
+            // O "Autor desconhecido" é o que o app pôs no lugar de um autor que o livro não tem.
+            author: editing.author === UNKNOWN_AUTHOR ? '' : editing.author,
+            coverUri: coverOf(editing),
+            coverType: editing.coverPath?.endsWith('.png') ? 'image/png' : 'image/jpeg',
+          }}
+          palette={palette}
+          saving={saving}
+          onCancel={() => setEditing(null)}
+          onImageError={() => ToastAndroid.show('Não foi possível abrir essa imagem', ToastAndroid.LONG)}
+          onSave={saveEdit}
         />
       )}
     </SafeAreaView>

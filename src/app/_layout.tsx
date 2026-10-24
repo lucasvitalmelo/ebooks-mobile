@@ -2,6 +2,7 @@ import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, useFonts } from '
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactNode } from 'react'
+import { WarmthOverlay } from '@/components/WarmthOverlay'
 import { DbProvider, useDb } from '@/lib/db/provider'
 import { paletteFor } from '@/lib/palette'
 import { themeStore, useThemeStore } from '@/store/theme-store'
@@ -25,6 +26,7 @@ function ThemedStack() {
       {/* "auto" seguia o modo escuro do celular, e as telas seguem o tema (#25). */}
       <StatusBar style={palette.statusBar} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.background } }} />
+      <WarmthOverlay />
     </>
   )
 }

@@ -18,6 +18,16 @@ test('lista os prontos com builtin como booleano', async () => {
   expect(themes).toHaveLength(PRESET_THEMES.length)
 })
 
+test('os prontos na ordem de PRESET_THEMES, os próprios depois', async () => {
+  const db = await setup()
+  await saveTheme(db, custom)
+  // Inserido por último, mas é pronto: vai para a posição dele na lista.
+  await db.exec("CREATE TEMP TABLE claro AS SELECT * FROM themes WHERE id = 'preset-claro'")
+  await db.exec("DELETE FROM themes WHERE id = 'preset-claro'")
+  await db.exec('INSERT INTO themes SELECT * FROM claro')
+  expect((await listThemes(db)).map((t) => t.id)).toEqual([...PRESET_THEMES.map((t) => t.id), 'custom-1'])
+})
+
 test('cria, edita e apaga um tema próprio', async () => {
   const db = await setup()
   await saveTheme(db, custom)

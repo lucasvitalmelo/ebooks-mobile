@@ -55,6 +55,11 @@ function send(event: ReaderEvent) {
   window.ReactNativeWebView?.postMessage(JSON.stringify(event))
 }
 
+function isLargeChunk(chunk: unknown): chunk is { index: number; total: number } {
+  const c = chunk as { index?: unknown; total?: unknown } | null
+  return typeof c?.index === 'number' && typeof c.total === 'number' && c.total > 1
+}
+
 function percentOf(cfi: string): number | null {
   return locationsReady && book ? book.locations.percentageFromCfi(cfi) : null
 }
@@ -376,6 +381,7 @@ async function open(
   searchBook?.destroy()
   searchBook = null
   const opened = ePub(buffer)
+  send({ type: 'openProgress', stage: 'parse', fraction: 0 })
   book = opened
   try {
     // Um arquivo que não é EPUB nunca resolve book.ready; o epub.js só avisa por este evento.
@@ -388,6 +394,7 @@ async function open(
     throw new Error('o arquivo não é um EPUB válido.')
   }
   if (book !== opened) return
+  send({ type: 'openProgress', stage: 'render', fraction: 0 })
   if (savedLocations) {
     try {
       opened.locations.load(savedLocations)
@@ -467,6 +474,7 @@ async function open(
     settling--
   }
   if (rendition !== current) return
+  send({ type: 'openProgress', stage: 'render', fraction: 1 })
   canPage = true
   anchor ??= currentLocationOf(current)?.start?.cfi ?? null
   if (anchor) sendPosition(anchor)
@@ -605,6 +613,8 @@ registerGestures(document, () => 0)
 const assembler = new Assembler()
 window.__rnReceive = (chunk) => {
   const raw = assembler.push(chunk)
+  // Só o open passa de um pedaço: a chegada de cada um avança o anel do app.
+  if (isLargeChunk(chunk)) send({ type: 'openProgress', stage: 'transfer', fraction: (chunk.index + 1) / chunk.total })
   if (raw === null) return
   const command = parseCommand(raw)
   if (!command) return

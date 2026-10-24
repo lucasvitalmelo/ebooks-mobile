@@ -4,7 +4,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { ArrowLeft, List, Search, Settings2 } from 'lucide-react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Animated,
   AppState,
@@ -22,6 +22,7 @@ import { AppearanceSheet } from '@/components/AppearanceSheet'
 import { NavigationSheet, type NavigationTab } from '@/components/NavigationSheet'
 import { NoteEditor } from '@/components/NoteEditor'
 import { ProgressBar } from '@/components/ProgressBar'
+import { ProgressRing } from '@/components/ProgressRing'
 import { Reader, type ReaderHandle } from '@/components/Reader'
 import { ReturnPill } from '@/components/ReturnPill'
 import { SearchSheet, type SearchState } from '@/components/SearchSheet'
@@ -51,13 +52,17 @@ import {
   type CheckpointState,
 } from '@/reader/checkpoint'
 import type { Rect } from '@/reader/hit'
+import { openProgress, stageLabel, type OpenStage } from '@/reader/open-progress'
 import type { ReaderEvent } from '@/reader/protocol'
 import { currentEntry, type TocEntry } from '@/reader/toc'
 import { bookFileDeps, downloadStore, syncStore } from '@/store/sync'
+import { delayForReadingSync } from '@/sync/reading-sync'
 import { themeStore, useThemeStore } from '@/store/theme-store'
 import { UI_FONT } from '@/ui/fonts'
 
 const SAVE_DELAY_MS = 1000
+// Sem nenhum sinal da abertura por este tempo, ela travou: vira erro em vez de anel eterno.
+const OPEN_TIMEOUT_MS = 30_000
 const KEEP_AWAKE_TAG = 'reader'
 
 type Popover =
@@ -77,6 +82,19 @@ interface Position {
   startCfi: string | null
   endCfi: string | null
   percent: number | null
+}
+
+// Monta invisível e só aparece se a abertura passar de 300 ms: livro pequeno abre sem piscar o anel.
+function OpeningOverlay({ background, children }: { background: string; children: ReactNode }) {
+  const [opacity] = useState(() => new Animated.Value(0))
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: 150, delay: 300, useNativeDriver: true }).start()
+  }, [opacity])
+  return (
+    <Animated.View pointerEvents="none" style={[styles.loading, { backgroundColor: background, opacity }]}>
+      {children}
+    </Animated.View>
+  )
 }
 
 function report(message: string) {
@@ -115,7 +133,29 @@ export default function BookScreen() {
   const checkpointRef = useRef<CheckpointState>(IDLE_CHECKPOINT)
   const position = useRef<Position | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loadingText, setLoadingText] = useState<string | null>(null)
+  // null: nada abrindo.
+  const [opening, setOpening] = useState<{ stage: OpenStage; value: number } | null>(null)
+  const advance = useCallback((stage: OpenStage, fraction: number) => {
+    setOpening((current) => {
+      // Só o começo da abertura cria o anel: um openProgress atrasado, depois de um
+      // erro ou do livro já na tela, não o traz de volta.
+      if (!current && stage !== 'download' && stage !== 'read') return null
+      const value = openProgress(stage, fraction)
+      // Nunca volta: um evento atrasado de uma etapa anterior não puxa o anel para trás.
+      return current && current.value > value ? current : { stage, value }
+    })
+  }, [])
+  // Cada avanço é um objeto novo e rearma o prazo; o anel sumindo ou a tela saindo o cancelam.
+  // O download fica de fora: não dá sinais no meio, e um livro grande numa rede lenta passa
+  // dos 30 s sem ter travado (a falha dele já vira erro sozinha).
+  useEffect(() => {
+    if (!opening || opening.stage === 'download') return
+    const watchdog = setTimeout(() => {
+      setOpening(null)
+      setError('Não foi possível abrir o livro.')
+    }, OPEN_TIMEOUT_MS)
+    return () => clearTimeout(watchdog)
+  }, [opening])
   const pending = useRef<{ cfi: string; percent: number | null } | null>(null)
   // A porcentagem só existe depois das locations; um relocated sem ela não
   // pode apagar a que já se sabia.
@@ -138,6 +178,24 @@ export default function BookScreen() {
     return () => void deactivateKeepAwake(KEEP_AWAKE_TAG)
   }, [keepAwake])
 
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // A gravação de saída termina depois da limpeza: sem isto, armaria um timer que ninguém limpa.
+  const left = useRef(false)
+  // Um timer só: cada gravação o rearma para depois da pausa e do intervalo mínimo.
+  const scheduleSync = useCallback(() => {
+    if (left.current || !themeStore.getState().syncWhileReading) return
+    clearTimeout(syncTimer.current)
+    const delay = delayForReadingSync(Date.now(), syncStore.getState().lastSyncAt)
+    syncTimer.current = setTimeout(() => void syncStore.getState().run(db), delay)
+  }, [db])
+  useEffect(() => {
+    left.current = false
+    return () => {
+      left.current = true
+      clearTimeout(syncTimer.current)
+    }
+  }, [])
+
   const flush = useCallback(async () => {
     clearTimeout(timer.current)
     const saved = pending.current
@@ -150,7 +208,8 @@ export default function BookScreen() {
       pending.current ??= saved
       throw e
     }
-  }, [db, id])
+    scheduleSync()
+  }, [db, id, scheduleSync])
 
   const save = useCallback(() => flush().catch(report('Não foi possível salvar a posição de leitura.')), [flush])
 
@@ -245,25 +304,31 @@ export default function BookScreen() {
       dispatch({ type: 'close' })
       setPopover(null)
       const found = await getBook(db, id)
-      if (!found) return setError('Livro não encontrado.')
+      if (!found) {
+        setOpening(null)
+        return setError('Livro não encontrado.')
+      }
       setBook(found)
-      if (needsDownload(found)) setLoadingText('Baixando o livro do Google Drive…')
+      // Reabrir (WebView remontada) recomeça o anel do zero.
+      setOpening(null)
+      advance(needsDownload(found) ? 'download' : 'read', 0)
       try {
         // O mesmo download do botão de baixar, se ele já estiver em andamento.
         await ensureBookFile(bookFileDeps(db), found, (book) => downloadStore.getState().ensure(db, book))
       } catch (e) {
         if (e instanceof BookNotHereError) {
+          setOpening(null)
           return setError('Este livro está no Google Drive. Conecte-se à internet para baixá-lo.')
         }
         throw e
-      } finally {
-        setLoadingText(null)
       }
+      advance('read', 0)
       const [progress, base64, rows] = await Promise.all([
         getProgress(db, id),
         readBase64(found.filePath),
         listHighlights(db, id),
       ])
+      advance('transfer', 0)
       lastPercent.current = progress?.percent ?? null
       savedCfi.current = progress?.cfi ?? null
       savedPercent.current = progress?.percent ?? null
@@ -281,9 +346,10 @@ export default function BookScreen() {
       await markOpened(db, id, Date.now())
     } catch (e) {
       console.error(e)
+      setOpening(null)
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [db, id, save, dispatch])
+  }, [db, id, save, dispatch, advance])
 
   useEffect(() => {
     reader.current?.send({ type: 'setTheme', theme: toReaderTheme(theme) })
@@ -358,11 +424,17 @@ export default function BookScreen() {
         case 'searchResults':
           if (event.id === searchId.current) setSearch({ query: searchQuery.current, results: event.results })
           return
+        case 'openProgress':
+          advance(event.stage, event.fraction)
+          // O livro já está na tela.
+          if (event.stage === 'render' && event.fraction === 1) setOpening(null)
+          return
         case 'error':
+          setOpening(null)
           return setError(event.message)
       }
     },
-    [db, id, open, queueSave, dispatch, startJump, showsOrigin, highlights, popover],
+    [db, id, open, queueSave, dispatch, startJump, showsOrigin, highlights, popover, advance],
   )
 
   async function onHighlight(): Promise<Highlight | null> {
@@ -494,10 +566,20 @@ export default function BookScreen() {
       </Animated.View>
       <View style={styles.reader} onLayout={onReaderLayout}>
         <Reader ref={reader} background={theme.background} onEvent={onEvent} />
-        {loadingText && (
-          <View pointerEvents="none" style={styles.loading}>
-            <Text style={[styles.loadingText, { color: palette.muted }]}>{loadingText}</Text>
-          </View>
+        {opening && (
+          <OpeningOverlay background={theme.background}>
+            <ProgressRing
+              value={opening.value}
+              color={palette.text}
+              track={palette.track}
+              // O download do Drive não informa progresso: o anel gira em vez de parar.
+              indeterminate={opening.stage === 'download'}
+            />
+            <Text style={[styles.loadingTitle, { color: palette.text }]} numberOfLines={1}>
+              {book?.title}
+            </Text>
+            <Text style={[styles.loadingText, { color: palette.muted }]}>{stageLabel(opening.stage)}</Text>
+          </OpeningOverlay>
         )}
         {popover && (
           <SelectionPopover
@@ -599,8 +681,10 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
     padding: 24,
   },
+  loadingTitle: { fontSize: 15, fontFamily: UI_FONT.medium, maxWidth: '80%' },
   loadingText: { textAlign: 'center', fontSize: 14, fontFamily: UI_FONT.regular },
   textButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   textButtonLabel: { fontFamily: UI_FONT.medium },

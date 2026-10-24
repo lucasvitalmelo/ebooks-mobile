@@ -278,3 +278,13 @@ test('escala da fonte', () => {
   expect(parseEvent(JSON.stringify({ type: 'fontScale', value: 0 }))).toBeNull()
   expect(parseEvent(JSON.stringify({ type: 'fontScale', value: 5 }))).toBeNull()
 })
+
+test('openProgress do leitor', () => {
+  expect(parseEvent(JSON.stringify({ type: 'openProgress', stage: 'transfer', fraction: 0.5 }))).toEqual({
+    type: 'openProgress',
+    stage: 'transfer',
+    fraction: 0.5,
+  })
+  expect(parseEvent(JSON.stringify({ type: 'openProgress', stage: 'download', fraction: 0.5 }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'openProgress', stage: 'parse', fraction: 'x' }))).toBeNull()
+})

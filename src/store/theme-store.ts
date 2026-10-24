@@ -23,11 +23,15 @@ interface ThemeState {
   themes: Theme[]
   active: Theme
   keepAwake: boolean
+  warmth: number
+  warmthPreview: number | null
+  setWarmthPreview(value: number | null): void
   load(db: Db): Promise<void>
   select(db: Db, id: string): Promise<void>
   update(db: Db, patch: ThemePatch): Promise<void>
   remove(db: Db, id: string): Promise<void>
   setKeepAwake(db: Db, value: boolean): Promise<void>
+  setWarmth(db: Db, value: number): Promise<void>
 }
 
 function uniqueId(themes: Theme[], base: string): string {
@@ -50,13 +54,17 @@ export function createThemeStore(now: () => number = Date.now) {
     themes: PRESET_THEMES,
     active: PRESET_THEMES[0],
     keepAwake: false,
+    warmth: 0,
+    warmthPreview: null,
+    setWarmthPreview: (value) => set({ warmthPreview: value }),
 
     load: (db) =>
       serial(async () => {
         const themes = await listThemes(db)
         const activeId = (await getSetting(db, 'activeThemeId')) ?? DEFAULT_THEME_ID
         const keepAwake = (await getSetting(db, 'keepAwake')) === '1'
-        set({ themes, active: themes.find((t) => t.id === activeId) ?? themes[0], keepAwake })
+        const warmth = Number((await getSetting(db, 'warmth')) ?? 0) || 0
+        set({ themes, active: themes.find((t) => t.id === activeId) ?? themes[0], keepAwake, warmth })
       }),
 
     select: (db, id) =>
@@ -108,6 +116,12 @@ export function createThemeStore(now: () => number = Date.now) {
       serial(async () => {
         await setSetting(db, 'keepAwake', value ? '1' : '0')
         set({ keepAwake: value })
+      }),
+
+    setWarmth: (db, value) =>
+      serial(async () => {
+        await setSetting(db, 'warmth', String(value))
+        set({ warmth: value })
       }),
   }))
 }

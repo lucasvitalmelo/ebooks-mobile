@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.1](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.7.0...v0.7.1) (2026-10-24)
+
+
+### Correções
+
+* **library:** esconde os livros só da nuvem com o Drive desconectado ([1370561](https://github.com/lucasvitalmelo/ebooks-mobile/commit/137056199b0b239354167285140c728855f57d1a))
+
+
+### Documentação
+
+* registra a biblioteca com o Drive desconectado ([50a0410](https://github.com/lucasvitalmelo/ebooks-mobile/commit/50a04100ca515fc4621f6521833557c4f0615707))
+
 ## [0.7.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.6.0...v0.7.0) (2026-10-24)
 
 

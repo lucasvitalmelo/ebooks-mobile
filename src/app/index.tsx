@@ -3,7 +3,7 @@ import * as DocumentPicker from 'expo-document-picker'
 import { File } from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import { router, useFocusEffect } from 'expo-router'
-import { Plus } from 'lucide-react-native'
+import { Plus, Settings } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -16,11 +16,12 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BookCard } from '@/components/BookCard'
 import { BookMenu } from '@/components/BookMenu'
 import { ContinueCard } from '@/components/ContinueCard'
 import { DriveSheet } from '@/components/DriveSheet'
+import { EmptyLibrary } from '@/components/EmptyLibrary'
 import { EditBookSheet, type EditValues } from '@/components/EditBookSheet'
 import { PdfConverter, type PdfConverterHandle } from '@/components/PdfConverter'
 import { SyncButton } from '@/components/SyncButton'
@@ -56,17 +57,18 @@ import { downloadStore, syncStore, useDownloadStore, useDriveStore } from '@/sto
 import { useThemeStore } from '@/store/theme-store'
 import { UI_FONT } from '@/ui/fonts'
 
-type Cell = BookWithProgress | { id: '__add' }
-
 const TOAST_INTERVAL = 2500
 const FIXED_MODIFIED = '2000-01-01T00:00:00Z'
 const PADDING = 16
 const COLUMN_GAP = 16
+// Acima da barra de navegação: o SafeAreaView afasta o conteúdo com padding, e o botão absoluto o ignora.
+const FAB_BOTTOM = 28
 
 export default function Library() {
   const db = useDb()
   const theme = useThemeStore((s) => s.active)
   const palette = paletteFor(theme)
+  const insets = useSafeAreaInsets()
   const [books, setBooks] = useState<BookWithProgress[] | null>(null)
   const [importing, setImporting] = useState(false)
   const [menuBook, setMenuBook] = useState<BookWithProgress | null>(null)
@@ -271,7 +273,6 @@ export default function Library() {
   const effectiveShelf = !someInCloud ? 'baixados' : !anyLocal ? 'disponiveis' : shelf
   const visible = books ? books.filter((book) => hasLocalFile(book) === (effectiveShelf === 'baixados')) : []
   const current = books ? pickContinue(books.filter(hasLocalFile)) : null
-  const cells: Cell[] = effectiveShelf === 'baixados' && books ? [...visible, { id: '__add' }] : visible
   const emptyShelf =
     someInCloud && visible.length === 0
       ? effectiveShelf === 'disponiveis'
@@ -292,17 +293,8 @@ export default function Library() {
           )}
         </Text>
         <SyncButton palette={palette} onPress={() => setDriveOpen(true)} />
-        <Pressable
-          accessibilityLabel="Adicionar EPUB"
-          onPress={onImport}
-          disabled={importing}
-          style={({ pressed }) => [
-            styles.add,
-            { backgroundColor: palette.primary, opacity: importing ? 0.5 : 1 },
-            pressed && styles.pressed,
-          ]}
-        >
-          {importing ? <ActivityIndicator color={palette.onPrimary} /> : <Plus size={20} color={palette.onPrimary} />}
+        <Pressable accessibilityLabel="Configurações" onPress={() => router.push('/settings')} style={styles.icon}>
+          <Settings size={20} color={palette.text} />
         </Pressable>
       </View>
       <SyncStrip palette={palette} />
@@ -338,19 +330,9 @@ export default function Library() {
           })}
         </View>
       )}
-      {books?.length === 0 ? (
-        <Pressable onPress={onImport} style={[styles.empty, { borderColor: palette.panelBorder }]}>
-          <View style={[styles.emptyIcon, { backgroundColor: palette.panel }]}>
-            <Plus size={24} color={palette.text} />
-          </View>
-          <Text style={[styles.emptyTitle, { color: palette.text }]}>Adicionar seu primeiro EPUB</Text>
-          <Text style={[styles.emptyText, { color: palette.muted }]}>
-            Escolha um ou mais arquivos .epub ou .pdf do seu aparelho.
-          </Text>
-        </Pressable>
-      ) : (
+      {books?.length === 0 ? null : (
         <FlatList
-          data={cells}
+          data={visible}
           keyExtractor={(cell) => cell.id}
           numColumns={2}
           columnWrapperStyle={styles.row}
@@ -371,31 +353,20 @@ export default function Library() {
               </View>
             ) : undefined
           }
-          renderItem={({ item }) =>
-            'title' in item ? (
-              <BookCard
-                book={item}
-                coverUri={coverOf(item)}
-                percent={item.percent}
-                palette={palette}
-                width={cellWidth}
-                cloud={!hasLocalFile(item)}
-                downloading={downloading.includes(item.id)}
-                onPress={() => open(item)}
-                onMenu={() => setMenuBook(item)}
-                onDownload={() => void downloadStore.getState().download(db, item)}
-              />
-            ) : (
-              <Pressable
-                accessibilityLabel="Adicionar"
-                onPress={onImport}
-                style={[styles.addTile, { width: cellWidth, borderColor: palette.panelBorder }]}
-              >
-                <Plus size={20} color={palette.muted} />
-                <Text style={[styles.addTileText, { color: palette.muted }]}>Adicionar</Text>
-              </Pressable>
-            )
-          }
+          renderItem={({ item }) => (
+            <BookCard
+              book={item}
+              coverUri={coverOf(item)}
+              percent={item.percent}
+              palette={palette}
+              width={cellWidth}
+              cloud={!hasLocalFile(item)}
+              downloading={downloading.includes(item.id)}
+              onPress={() => open(item)}
+              onMenu={() => setMenuBook(item)}
+              onDownload={() => void downloadStore.getState().download(db, item)}
+            />
+          )}
         />
       )}
       <BookMenu
@@ -443,6 +414,20 @@ export default function Library() {
           onSave={saveEdit}
         />
       )}
+      {books?.length === 0 && <EmptyLibrary palette={palette} />}
+      {/* Por cima de tudo e sempre à mão; faz o papel do antigo "adicionar" do cabeçalho. */}
+      <Pressable
+        accessibilityLabel="Adicionar livro"
+        onPress={onImport}
+        disabled={importing}
+        style={({ pressed }) => [
+          styles.fab,
+          { backgroundColor: palette.primary, bottom: FAB_BOTTOM + insets.bottom },
+          pressed && styles.pressed,
+        ]}
+      >
+        {importing ? <ActivityIndicator color={palette.onPrimary} /> : <Plus size={24} color={palette.onPrimary} />}
+      </Pressable>
     </SafeAreaView>
   )
 }
@@ -459,9 +444,20 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, fontSize: 20, fontFamily: UI_FONT.semibold },
   count: { fontSize: 14, fontFamily: UI_FONT.regular },
-  add: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pressed: { transform: [{ translateY: 1 }] },
-  grid: { paddingHorizontal: PADDING, paddingBottom: 24, gap: 24 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+  },
+  // O último cartão não fica embaixo do botão flutuante.
+  grid: { paddingHorizontal: PADDING, paddingBottom: 100, gap: 24 },
   row: { gap: COLUMN_GAP },
   continue: { marginBottom: 0, gap: 24 },
   tabs: { flexDirection: 'row', gap: 4, padding: 4, marginHorizontal: 16, marginBottom: 16, borderRadius: 10 },
@@ -469,28 +465,4 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontFamily: UI_FONT.regular },
   tabTextSelected: { fontFamily: UI_FONT.medium },
   emptyShelf: { fontSize: 14, fontFamily: UI_FONT.regular },
-  addTile: {
-    aspectRatio: 2 / 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  addTileText: { fontSize: 14, fontFamily: UI_FONT.medium },
-  empty: {
-    marginTop: 48,
-    marginHorizontal: 16,
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-  },
-  emptyIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 16, fontFamily: UI_FONT.medium },
-  emptyText: { fontSize: 14, textAlign: 'center', fontFamily: UI_FONT.regular },
 })

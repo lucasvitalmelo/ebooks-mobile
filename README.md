@@ -48,6 +48,7 @@ Branches `main` (releases) e `develop` (integração); features em `feat/<nome>`
 - [x] Grifos e seleção de texto
 - [x] Busca, notas nos grifos, editar e exportar livro
 - [x] Importar PDF (convertido em EPUB) e limpeza do estilo dos livros
-- [ ] Login Google e sync com o Drive
-- [ ] Extras nativos ("Abrir com…", tela ligada, botões de volume)
+- [x] Login Google e sync com o Drive
+- [x] Luz da tela (temperatura que mantém o preto e brilho abaixo do mínimo do sistema), anel de progresso ao abrir um livro e tela de Configurações
+- [ ] Extras nativos ("Abrir com…", botões de volume)
 - [ ] iOS

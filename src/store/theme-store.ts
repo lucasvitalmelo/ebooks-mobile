@@ -25,13 +25,21 @@ interface ThemeState {
   keepAwake: boolean
   warmth: number
   warmthPreview: number | null
+  // null: o brilho do sistema. Valor de 0 a 100 (ver lib/brightness).
+  brightness: number | null
+  brightnessPreview: number | null
+  // Sobe o progresso para o Drive enquanto se lê, sem esperar sair do livro.
+  syncWhileReading: boolean
   setWarmthPreview(value: number | null): void
+  setBrightnessPreview(value: number | null): void
   load(db: Db): Promise<void>
   select(db: Db, id: string): Promise<void>
   update(db: Db, patch: ThemePatch): Promise<void>
   remove(db: Db, id: string): Promise<void>
   setKeepAwake(db: Db, value: boolean): Promise<void>
   setWarmth(db: Db, value: number): Promise<void>
+  setBrightness(db: Db, value: number | null): Promise<void>
+  setSyncWhileReading(db: Db, value: boolean): Promise<void>
 }
 
 function uniqueId(themes: Theme[], base: string): string {
@@ -56,7 +64,11 @@ export function createThemeStore(now: () => number = Date.now) {
     keepAwake: false,
     warmth: 0,
     warmthPreview: null,
+    brightness: null,
+    brightnessPreview: null,
+    syncWhileReading: true,
     setWarmthPreview: (value) => set({ warmthPreview: value }),
+    setBrightnessPreview: (value) => set({ brightnessPreview: value }),
 
     load: (db) =>
       serial(async () => {
@@ -64,7 +76,18 @@ export function createThemeStore(now: () => number = Date.now) {
         const activeId = (await getSetting(db, 'activeThemeId')) ?? DEFAULT_THEME_ID
         const keepAwake = (await getSetting(db, 'keepAwake')) === '1'
         const warmth = Number((await getSetting(db, 'warmth')) ?? 0) || 0
-        set({ themes, active: themes.find((t) => t.id === activeId) ?? themes[0], keepAwake, warmth })
+        const storedBrightness = await getSetting(db, 'brightness')
+        const brightness =
+          storedBrightness === null || storedBrightness === 'system' ? null : Number(storedBrightness) || 0
+        const syncWhileReading = (await getSetting(db, 'syncWhileReading')) !== '0'
+        set({
+          themes,
+          active: themes.find((t) => t.id === activeId) ?? themes[0],
+          keepAwake,
+          warmth,
+          brightness,
+          syncWhileReading,
+        })
       }),
 
     select: (db, id) =>
@@ -122,6 +145,18 @@ export function createThemeStore(now: () => number = Date.now) {
       serial(async () => {
         await setSetting(db, 'warmth', String(value))
         set({ warmth: value })
+      }),
+
+    setBrightness: (db, value) =>
+      serial(async () => {
+        await setSetting(db, 'brightness', value === null ? 'system' : String(value))
+        set({ brightness: value })
+      }),
+
+    setSyncWhileReading: (db, value) =>
+      serial(async () => {
+        await setSetting(db, 'syncWhileReading', value ? '1' : '0')
+        set({ syncWhileReading: value })
       }),
   }))
 }

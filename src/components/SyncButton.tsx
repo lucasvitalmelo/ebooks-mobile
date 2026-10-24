@@ -1,6 +1,6 @@
 import { Cloud, CloudAlert, CloudCheck, CloudOff, RefreshCw } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
-import { Animated, Easing, Pressable, StyleSheet } from 'react-native'
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native'
 import type { Palette } from '@/lib/palette'
 import { useDriveStore, useSyncStore } from '@/store/sync'
 
@@ -27,7 +27,9 @@ export function SyncButton({ palette, onPress }: Props) {
     }
   }, [syncing, spin])
 
-  if (drive === 'verificando') return null
+  // Guarda o lugar: a engrenagem (e as setas da biblioteca vazia) não pulam quando ele aparece.
+  if (drive === 'verificando') return <View style={styles.button} />
+
   const color = palette.text
   const icon = syncing ? (
     <Animated.View

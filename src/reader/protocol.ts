@@ -1,5 +1,6 @@
 import { isFontId } from './fonts'
 import type { Rect } from './hit'
+import type { ReaderOpenStage } from './open-progress'
 import type { SearchResult } from './search-text'
 import type { ReaderTheme } from './theme'
 
@@ -51,6 +52,7 @@ export type ReaderEvent =
   | { type: 'jumpEnded'; ok: boolean }
   | { type: 'searchResults'; id: number; results: SearchResult[] }
   | { type: 'fontScale'; value: number }
+  | { type: 'openProgress'; stage: ReaderOpenStage; fraction: number }
   | { type: 'error'; message: string }
 
 type Fields = Record<string, unknown>
@@ -209,6 +211,10 @@ export function parseEvent(raw: string): ReaderEvent | null {
         : null
     case 'fontScale':
       return isFontScale(m.value) ? { type: 'fontScale', value: m.value } : null
+    case 'openProgress':
+      return (m.stage === 'transfer' || m.stage === 'parse' || m.stage === 'render') && isNumber(m.fraction)
+        ? { type: 'openProgress', stage: m.stage, fraction: m.fraction }
+        : null
     case 'error':
       return isString(m.message) ? { type: 'error', message: m.message } : null
     default:

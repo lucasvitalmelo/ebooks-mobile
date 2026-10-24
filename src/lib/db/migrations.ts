@@ -84,13 +84,49 @@ const MIGRATIONS: ((db: Db) => Promise<void>)[] = [
       ALTER TABLE books ADD COLUMN prepared INTEGER NOT NULL DEFAULT 0;
     `)
   },
+  async (db) => {
+    // Sincronização com o Drive (os mesmos carimbos do leitor web). Os livros
+    // de antes começam com tudo na data da importação e esperando envio; o
+    // progresso perde o NOT NULL do cfi porque o web grava progresso sem posição.
+    await db.exec(`
+      ALTER TABLE books ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE books ADD COLUMN fileUpdatedAt INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE books ADD COLUMN blobUpdatedAt INTEGER;
+      ALTER TABLE books ADD COLUMN pendingUpload INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE books ADD COLUMN driveFileId TEXT;
+      ALTER TABLE books ADD COLUMN driveCoverId TEXT;
+      UPDATE books SET updatedAt = addedAt, fileUpdatedAt = addedAt, blobUpdatedAt = addedAt;
+
+      ALTER TABLE highlights ADD COLUMN color TEXT NOT NULL DEFAULT '#fac73c';
+
+      CREATE TABLE progress_new (
+        bookId TEXT PRIMARY KEY NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        cfi TEXT,
+        percent REAL,
+        updatedAt INTEGER NOT NULL
+      );
+      INSERT INTO progress_new (bookId, cfi, percent, updatedAt) SELECT bookId, cfi, percent, updatedAt FROM progress;
+      DROP TABLE progress;
+      ALTER TABLE progress_new RENAME TO progress;
+
+      CREATE TABLE deletions (
+        key TEXT PRIMARY KEY NOT NULL,
+        deletedAt INTEGER NOT NULL
+      );
+    `)
+  },
 ]
 
-export async function migrate(db: Db): Promise<void> {
+export function migrate(db: Db): Promise<void> {
+  return migrateTo(db, MIGRATIONS.length)
+}
+
+// Para os testes: aplica as migrações só até `target`.
+export async function migrateTo(db: Db, target: number): Promise<void> {
   // Vale por conexão, então a cada abertura, fora da transação.
   await db.exec('PRAGMA foreign_keys = ON')
   const row = await db.getFirst<{ user_version: number }>('PRAGMA user_version')
-  for (let version = row?.user_version ?? 0; version < MIGRATIONS.length; version++) {
+  for (let version = row?.user_version ?? 0; version < Math.min(target, MIGRATIONS.length); version++) {
     const step = MIGRATIONS[version]
     await db.transaction(async () => {
       await step(db)

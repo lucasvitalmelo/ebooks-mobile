@@ -8,8 +8,22 @@ const highlight = { id: 'h', cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:5)' }
 
 test('aceita comandos válidos', () => {
   expect(
-    parseCommand(JSON.stringify({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [highlight] })),
-  ).toEqual({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [highlight] })
+    parseCommand(
+      JSON.stringify({
+        type: 'open',
+        base64: 'AAA',
+        cfi: null,
+        locations: null,
+        highlights: [highlight],
+        fontScale: null,
+      }),
+    ),
+  ).toEqual({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [highlight], fontScale: null })
+  expect(
+    parseCommand(
+      JSON.stringify({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [], fontScale: 0.8 }),
+    ),
+  ).toEqual({ type: 'open', base64: 'AAA', cfi: null, locations: null, highlights: [], fontScale: 0.8 })
   expect(parseCommand('{"type":"next"}')).toEqual({ type: 'next' })
   expect(parseCommand(JSON.stringify({ type: 'goTo', target: 'epubcfi(/6/2)' }))).toEqual({
     type: 'goTo',
@@ -43,6 +57,11 @@ test('descarta comandos novos malformados', () => {
   expect(
     parseCommand(JSON.stringify({ type: 'open', base64: 'A', cfi: null, locations: null, highlights: [{ id: 1 }] })),
   ).toBeNull()
+  // Sem escala (ou fora de 0,5–2) a página mede de novo.
+  const open = { type: 'open', base64: 'A', cfi: null, locations: null, highlights: [] }
+  expect(parseCommand(JSON.stringify(open))).toEqual({ ...open, fontScale: null })
+  expect(parseCommand(JSON.stringify({ ...open, fontScale: 5 }))).toEqual({ ...open, fontScale: null })
+  expect(parseCommand(JSON.stringify({ ...open, fontScale: '0.8' }))).toEqual({ ...open, fontScale: null })
   expect(parseCommand(JSON.stringify({ type: 'goTo', target: '' }))).toBeNull()
   expect(parseCommand(JSON.stringify({ type: 'goTo', cfi: 'epubcfi(/6/2)' }))).toBeNull()
   expect(parseCommand(JSON.stringify({ type: 'addHighlight', id: 'h' }))).toBeNull()
@@ -252,4 +271,10 @@ test('busca', () => {
     results: [{ cfi: 'x', excerpt: 'y', chapterLabel: null }],
   })
   expect(parseEvent(JSON.stringify({ type: 'searchResults', id: 3, results: [{ cfi: 'x' }] }))).toBeNull()
+})
+
+test('escala da fonte', () => {
+  expect(parseEvent(JSON.stringify({ type: 'fontScale', value: 0.75 }))).toEqual({ type: 'fontScale', value: 0.75 })
+  expect(parseEvent(JSON.stringify({ type: 'fontScale', value: 0 }))).toBeNull()
+  expect(parseEvent(JSON.stringify({ type: 'fontScale', value: 5 }))).toBeNull()
 })

@@ -11,7 +11,15 @@ export interface HighlightRef {
 }
 
 export type Command =
-  | { type: 'open'; base64: string; cfi: string | null; locations: string | null; highlights: HighlightRef[] }
+  | {
+      type: 'open'
+      base64: string
+      cfi: string | null
+      locations: string | null
+      highlights: HighlightRef[]
+      // Escala guardada do livro; null → a página mede e avisa com o evento fontScale.
+      fontScale: number | null
+    }
   | { type: 'next' }
   | { type: 'prev' }
   // CFI (epubcfi(...)) ou href de capítulo, como vem do sumário.
@@ -42,6 +50,7 @@ export type ReaderEvent =
   | { type: 'linkJump' }
   | { type: 'jumpEnded'; ok: boolean }
   | { type: 'searchResults'; id: number; results: SearchResult[] }
+  | { type: 'fontScale'; value: number }
   | { type: 'error'; message: string }
 
 type Fields = Record<string, unknown>
@@ -50,6 +59,7 @@ const isString = (value: unknown): value is string => typeof value === 'string'
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const isInteger = (value: unknown): value is number => Number.isInteger(value)
 const isNullableString = (value: unknown): value is string | null => value === null || isString(value)
+const isFontScale = (value: unknown): value is number => isNumber(value) && value >= 0.5 && value <= 2
 
 function isRect(value: unknown): value is Rect {
   if (!value || typeof value !== 'object') return false
@@ -135,6 +145,7 @@ export function parseCommand(raw: string): Command | null {
             cfi: m.cfi,
             locations: m.locations,
             highlights: m.highlights.map(({ id, cfiRange }) => ({ id, cfiRange })),
+            fontScale: isFontScale(m.fontScale) ? m.fontScale : null,
           }
         : null
     case 'next':
@@ -196,6 +207,8 @@ export function parseEvent(raw: string): ReaderEvent | null {
             results: m.results.map(({ cfi, excerpt, chapterLabel }) => ({ cfi, excerpt, chapterLabel })),
           }
         : null
+    case 'fontScale':
+      return isFontScale(m.value) ? { type: 'fontScale', value: m.value } : null
     case 'error':
       return isString(m.message) ? { type: 'error', message: m.message } : null
     default:

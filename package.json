@@ -51,6 +51,8 @@
     "eslint-config-prettier": "^10.1.8",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.12",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.4.299",
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "vite": "^8.3.5",
@@ -61,12 +63,14 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p reader-web",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p reader-web && tsc --noEmit -p pdf-web",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "jest",
     "reader:build": "vite build reader-web && node scripts/embed-reader.mjs",
-    "postinstall": "npm run reader:build"
+    "pdf:build": "vite build pdf-web && node scripts/embed-pdf.mjs",
+    "pdf:generate": "node scripts/generate-test-pdf.mjs",
+    "postinstall": "npm run reader:build && npm run pdf:build"
   },
   "private": true,
   "jest": {

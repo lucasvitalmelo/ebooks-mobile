@@ -15,12 +15,14 @@ async function setup(overrides: Partial<ImportDeps> = {}) {
   const db = openTestDb()
   await migrate(db)
   const stored = new Set<string>()
+  const written = new Map<string, Uint8Array>()
   const discarded: string[] = []
   const deps: ImportDeps = {
     db,
     readBytes: async (uri) => (uri === FIXTURE ? fixtureBytes : new Uint8Array([1, 2, 3])),
-    storeBook: async (id) => {
+    storeBook: async (id, bytes) => {
       stored.add(bookPath(id))
+      written.set(id, bytes)
     },
     storeCover: async (id, _bytes, extension) => {
       stored.add(coverPath(id, extension))
@@ -32,7 +34,7 @@ async function setup(overrides: Partial<ImportDeps> = {}) {
     now: () => 1000,
     ...overrides,
   }
-  return { db, deps, stored, discarded }
+  return { db, deps, stored, discarded, written }
 }
 
 async function epubWithoutCover(title: string) {
@@ -50,7 +52,7 @@ async function epubWithoutCover(title: string) {
 }
 
 test('importa o livro, a capa e grava no banco', async () => {
-  const { db, deps, stored } = await setup()
+  const { db, deps, stored, written } = await setup()
   const summary = await importBooks(deps, [{ uri: FIXTURE, name: 'livro.epub' }])
   expect(summary).toEqual({ imported: ['O Relógio Parado da Sala'], duplicates: [], invalid: [] })
   const [book] = await listBooks(db)
@@ -58,7 +60,7 @@ test('importa o livro, a capa e grava no banco', async () => {
     title: 'O Relógio Parado da Sala',
     author: 'Joana Vieira',
     addedAt: 1000,
-    size: fixtureBytes.length,
+    size: [...written.values()][0].length,
   })
   expect(stored).toEqual(new Set([book.filePath, book.coverPath]))
 })
@@ -166,6 +168,33 @@ test('importa dois livros diferentes na mesma leva', async () => {
   ])
   expect(summary.imported).toEqual(['O Relógio Parado da Sala', 'Outro Livro'])
   expect(await listBooks(db)).toHaveLength(2)
+})
+
+test('guarda o livro já limpo', async () => {
+  const zip = await JSZip.loadAsync(fixtureBytes)
+  zip.file('OEBPS/estilo.css', 'p { color: red }')
+  const dirty = await zip.generateAsync({ type: 'uint8array' })
+  const { deps, written } = await setup({ readBytes: async () => dirty })
+  await importBooks(deps, [{ uri: FIXTURE, name: 'livro.epub' }])
+  const stored = await JSZip.loadAsync([...written.values()][0])
+  expect(await stored.file('OEBPS/estilo.css')!.async('string')).not.toMatch(/color/)
+})
+
+test('PDF passa pela conversão e entra como EPUB', async () => {
+  const pdf = new TextEncoder().encode('%PDF-1.7 ...')
+  const convertPdf = jest.fn(async () => fixtureBytes)
+  const { db, deps } = await setup({ readBytes: async () => pdf, convertPdf })
+  const summary = await importBooks(deps, [{ uri: 'file:///cache/livro.pdf', name: 'livro.pdf' }])
+  expect(convertPdf).toHaveBeenCalledWith('file:///cache/livro.pdf', 'livro.pdf')
+  expect(summary.imported).toEqual(['O Relógio Parado da Sala'])
+  expect(await listBooks(db)).toHaveLength(1)
+})
+
+test('PDF sem conversor disponível entra no resumo', async () => {
+  const pdf = new TextEncoder().encode('%PDF-1.7 ...')
+  const { deps } = await setup({ readBytes: async () => pdf })
+  const summary = await importBooks(deps, [{ uri: 'x', name: 'livro.pdf' }])
+  expect(summary.invalid).toEqual([{ name: 'livro.pdf', reason: 'Não foi possível converter o PDF' }])
 })
 
 test('falha ao gravar no banco também desfaz os arquivos', async () => {

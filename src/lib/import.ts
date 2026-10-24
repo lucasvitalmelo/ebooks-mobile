@@ -3,6 +3,7 @@ import { bookPath, coverPath } from './book-paths'
 import type { Db } from './db/db'
 import { bookIdFor } from './epub/book-id'
 import { parseEpub } from './epub/parse'
+import { prepareEpub } from './epub/prepare'
 
 export interface PickedFile {
   uri: string
@@ -12,7 +13,8 @@ export interface PickedFile {
 export interface ImportDeps {
   db: Db
   readBytes(uri: string): Promise<Uint8Array>
-  storeBook(id: string, sourceUri: string): Promise<void>
+  storeBook(id: string, bytes: Uint8Array): Promise<void>
+  convertPdf?(uri: string, name: string): Promise<Uint8Array>
   storeCover(id: string, bytes: Uint8Array, extension: string): Promise<void>
   deleteFiles(paths: (string | null)[]): void
   discardPicked(uri: string): void
@@ -25,11 +27,21 @@ export interface ImportSummary {
   invalid: { name: string; reason: string }[]
 }
 
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]
+
+function isPdf(bytes: Uint8Array): boolean {
+  return PDF_SIGNATURE.every((byte, i) => bytes[i] === byte)
+}
+
 export async function importBooks(deps: ImportDeps, files: PickedFile[]): Promise<ImportSummary> {
   const summary: ImportSummary = { imported: [], duplicates: [], invalid: [] }
   for (const file of files) {
     try {
-      const bytes = await deps.readBytes(file.uri)
+      let bytes = await deps.readBytes(file.uri)
+      if (isPdf(bytes)) {
+        if (!deps.convertPdf) throw new Error('Não foi possível converter o PDF')
+        bytes = await deps.convertPdf(file.uri, file.name)
+      }
       const parsed = await parseEpub(bytes, file.name)
       const id = bookIdFor(bytes)
       if (await getBook(deps.db, id)) {
@@ -41,7 +53,8 @@ export async function importBooks(deps: ImportDeps, files: PickedFile[]): Promis
         // O caminho entra na lista antes da cópia: se ela falhar no meio, o arquivo parcial também é apagado.
         const filePath = bookPath(id)
         stored.push(filePath)
-        await deps.storeBook(id, file.uri)
+        const prepared = (await prepareEpub(bytes)).bytes
+        await deps.storeBook(id, prepared)
         let coverFile: string | null = null
         if (parsed.cover) {
           coverFile = coverPath(id, parsed.cover.extension)
@@ -54,7 +67,7 @@ export async function importBooks(deps: ImportDeps, files: PickedFile[]): Promis
           author: parsed.author,
           filePath,
           coverPath: coverFile,
-          size: bytes.length,
+          size: prepared.length,
           addedAt: deps.now(),
         })
       } catch (error) {

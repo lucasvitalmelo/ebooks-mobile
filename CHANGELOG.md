@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.3.0...v0.4.0) (2026-10-24)
+
+
+### Funcionalidades
+
+* **app:** adiciona busca, nota, menu do livro e edição nas telas ([e82c632](https://github.com/lucasvitalmelo/ebooks-mobile/commit/e82c632308c4ac683662c3fc96018ef93e7b9eb1))
+* **app:** liga busca, notas, edição, exportação e temperatura às telas ([e037039](https://github.com/lucasvitalmelo/ebooks-mobile/commit/e037039a5047cd764c1a49e30c4d8e5c8a3a3f94))
+* **db:** guarda notas nos grifos e atualiza as informações do livro ([8312bab](https://github.com/lucasvitalmelo/ebooks-mobile/commit/8312bab323358c0d43cbaa51a2e83953e094eee5))
+* **library:** edita título, autor e capa e exporta o EPUB ([8df5f50](https://github.com/lucasvitalmelo/ebooks-mobile/commit/8df5f503931728cb8b34e1fe428feff3eabb1de3))
+* **reader:** busca no livro ([eec5cb0](https://github.com/lucasvitalmelo/ebooks-mobile/commit/eec5cb0216672d3dbd4b7d4041f9e475db6741f2))
+* **theme:** adiciona a temperatura da luz ([feb40ba](https://github.com/lucasvitalmelo/ebooks-mobile/commit/feb40bae1176fb7983c9c48269761dea29ac2b89))
+* **theme:** adiciona o tema Preto para telas OLED ([b10486a](https://github.com/lucasvitalmelo/ebooks-mobile/commit/b10486a6f421c04ae3ba41ae43d98eec00039d55))
+
+
+### Correções
+
+* atualiza os pacotes do Expo para os patches atuais do SDK 58 ([0290aff](https://github.com/lucasvitalmelo/ebooks-mobile/commit/0290aff6df6ff30e1d259d0e7fadf3df9a2f25df))
+
+
+### Documentação
+
+* registra as decisões da v0.4 ([dea5dd1](https://github.com/lucasvitalmelo/ebooks-mobile/commit/dea5dd15363a5451c3c958e112e30b0a39b5160a))
+
 ## [0.3.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.2.0...v0.3.0) (2026-10-23)
 
 

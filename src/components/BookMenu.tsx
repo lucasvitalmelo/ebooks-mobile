@@ -1,4 +1,4 @@
-import { Download, Pencil, Trash2 } from 'lucide-react-native'
+import { Download, HardDriveDownload, Pencil, Share, Trash2 } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,15 +9,32 @@ import { UI_FONT } from '@/ui/fonts'
 interface Props {
   title: string | null
   palette: Palette
+  canEdit: boolean
+  canRemoveLocal: boolean
+  cloud: boolean
   onEdit(): void
   onExport(): void
+  onDownload(): void
+  onRemoveLocal(): void
   onDelete(): void
   onClose(): void
 }
 
 const DESTRUCTIVE = '#e7000b'
 
-export function BookMenu({ title, palette, onEdit, onExport, onDelete, onClose }: Props) {
+export function BookMenu({
+  title,
+  palette,
+  canEdit,
+  canRemoveLocal,
+  cloud,
+  onEdit,
+  onExport,
+  onDownload,
+  onRemoveLocal,
+  onDelete,
+  onClose,
+}: Props) {
   const insets = useSafeAreaInsets()
   const item = (label: string, icon: ReactNode, onPress: () => void, color = palette.text) => (
     <Pressable
@@ -38,8 +55,11 @@ export function BookMenu({ title, palette, onEdit, onExport, onDelete, onClose }
         <Text style={[styles.title, { color: palette.muted }]} numberOfLines={1}>
           {title}
         </Text>
-        {item('Editar', <Pencil size={18} color={palette.text} />, onEdit)}
-        {item('Exportar', <Download size={18} color={palette.text} />, onExport)}
+        {cloud && item('Baixar', <Download size={18} color={palette.text} />, onDownload)}
+        {canEdit && item('Editar', <Pencil size={18} color={palette.text} />, onEdit)}
+        {canEdit && item('Exportar', <Share size={18} color={palette.text} />, onExport)}
+        {canRemoveLocal &&
+          item('Remover deste aparelho', <HardDriveDownload size={18} color={palette.text} />, onRemoveLocal)}
         <View style={[styles.separator, { backgroundColor: palette.border }]} />
         {item('Excluir livro', <Trash2 size={18} color={DESTRUCTIVE} />, onDelete, DESTRUCTIVE)}
         <WarmthOverlay />

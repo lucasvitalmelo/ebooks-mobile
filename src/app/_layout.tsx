@@ -6,6 +6,7 @@ import { WarmthOverlay } from '@/components/WarmthOverlay'
 import { DbProvider, useDb } from '@/lib/db/provider'
 import { paletteFor } from '@/lib/palette'
 import { themeStore, useThemeStore } from '@/store/theme-store'
+import { useAutoSync } from '@/sync/useAutoSync'
 
 function ThemeLoader({ children }: { children: ReactNode }) {
   const db = useDb()
@@ -15,6 +16,7 @@ function ThemeLoader({ children }: { children: ReactNode }) {
       .load(db)
       .catch((error: unknown) => console.error('Não foi possível carregar o tema.', error))
   }, [db])
+  useAutoSync(db)
   return children
 }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.6.0...v0.7.0) (2026-10-24)
+
+
+### Funcionalidades
+
+* **app:** tela de Configurações ([5c6a7d6](https://github.com/lucasvitalmelo/ebooks-mobile/commit/5c6a7d675e6bf56a858e820e2c4dfc326636a375))
+* **app:** temperatura que mantém o preto e brilho do app ([9589f40](https://github.com/lucasvitalmelo/ebooks-mobile/commit/9589f40f9d6493317013bb9af2dcda0f6ba8d25d))
+* **library:** botão flutuante, engrenagem e biblioteca vazia com setas ([40ca4be](https://github.com/lucasvitalmelo/ebooks-mobile/commit/40ca4bea248e550f9587f5770631097c4d486e17))
+* **reader:** anel de progresso ao abrir e sincronização durante a leitura ([c9064a8](https://github.com/lucasvitalmelo/ebooks-mobile/commit/c9064a83ec87ccdb36663e08300578eadb93b56e))
+
+
+### Documentação
+
+* registra as decisões da v0.7 ([b08a02f](https://github.com/lucasvitalmelo/ebooks-mobile/commit/b08a02f3a45b9388608b90bd4393efc22ddb1c3e))
+
 ## [0.6.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.5.0...v0.6.0) (2026-10-24)
 
 

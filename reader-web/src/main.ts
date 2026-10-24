@@ -9,6 +9,7 @@ import type { ReaderTheme } from '../../src/reader/theme'
 import { themeCss } from '../../src/reader/theme-css'
 import { currentEntry, flattenToc, type TocEntry } from '../../src/reader/toc'
 import fontsCss from './fonts.css?inline'
+import { measureFontScale } from './measure'
 
 declare global {
   interface Window {
@@ -34,6 +35,8 @@ let searchBook: Book | null = null
 let searchRequest = 0
 let searching: Promise<void> = Promise.resolve()
 let tocEntries: TocEntry[] = []
+// Fator do livro aberto sobre o tamanho do tema (books.fontScale); 1 até medir.
+let fontScale = 1
 // A posição que o leitor escolheu: a restaurada, a de um goTo ou a página para
 // onde ele virou. Fontes que chegam depois (font-display: swap) e mudanças de
 // tema refazem o layout e mudam onde a página começa sem o leitor sair dela;
@@ -201,7 +204,7 @@ function applyTheme(t: ReaderTheme) {
   const r = rendition
   if (!r) return
   contentsOf(r).forEach(injectTheme)
-  r.themes.fontSize(`${t.fontSize}px`)
+  r.themes.fontSize(`${t.fontSize * fontScale}px`)
   if (!canPage) return
   // O manager só relayouta quando o contêiner muda de tamanho (a margem); fonte,
   // tamanho e entrelinha mudam só o texto, que resizeCheck remede em cada capítulo.
@@ -351,13 +354,20 @@ async function generateLocations(target: Book, buffer: ArrayBuffer) {
   if (anchor) sendPosition(anchor)
 }
 
-async function open(base64: string, cfi: string | null, savedLocations: string | null, refs: HighlightRef[]) {
+async function open(
+  base64: string,
+  cfi: string | null,
+  savedLocations: string | null,
+  refs: HighlightRef[],
+  savedScale: number | null,
+) {
   book?.destroy()
   book = null
   rendition = null
   canPage = false
   locationsReady = false
   anchor = cfi
+  fontScale = savedScale ?? 1
   highlights.clear()
   selectionSent = false
   const buffer = base64ToArrayBuffer(base64)
@@ -470,6 +480,18 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
       send({ type: 'toc', entries: [] })
     })
   if (!locationsReady) generateLocations(opened, buffer).catch(console.error)
+  if (savedScale === null) {
+    measureFontScale(buffer)
+      .then((value) => {
+        if (book !== opened) return
+        send({ type: 'fontScale', value })
+        if (value !== fontScale) {
+          fontScale = value
+          if (theme) applyTheme(theme)
+        }
+      })
+      .catch((error) => console.error('Não foi possível medir a escala da fonte', error))
+  }
 }
 
 async function goTo(target: string) {
@@ -551,7 +573,7 @@ async function runSearch(id: number, query: string) {
 async function handle(command: Command) {
   switch (command.type) {
     case 'open':
-      return open(command.base64, command.cfi, command.locations, command.highlights)
+      return open(command.base64, command.cfi, command.locations, command.highlights, command.fontScale)
     case 'next':
       return canPage ? rendition?.next() : undefined
     case 'prev':

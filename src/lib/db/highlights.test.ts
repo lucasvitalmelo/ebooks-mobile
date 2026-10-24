@@ -1,5 +1,6 @@
 import { insertBook } from './books'
-import { addHighlight, deleteHighlight, listHighlights, setHighlightNote } from './highlights'
+import { setDriveEnabled } from './deletions'
+import { addHighlight, deleteHighlight, HIGHLIGHT_COLOR, listHighlights, setHighlightNote } from './highlights'
 import { migrate } from './migrations'
 import { openTestDb } from './testing/node-db'
 
@@ -35,11 +36,12 @@ test('grava, lista na ordem do livro e apaga', async () => {
     bookId: 'b',
     cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:5)',
     text: 'antes',
+    color: '#fac73c',
     createdAt: 2,
     updatedAt: 2,
     note: null,
   })
-  await deleteHighlight(db, 'h1')
+  await deleteHighlight(db, 'h1', 3)
   expect((await listHighlights(db, 'b')).map((h) => h.id)).toEqual(['h2'])
 })
 
@@ -65,4 +67,18 @@ test('nota: grava sem espaços nas pontas e vazia apaga', async () => {
   expect((await listHighlights(db, 'b'))[0]).toMatchObject({ note: 'minha nota', updatedAt: 5 })
   await setHighlightNote(db, 'h', '   ', 6)
   expect((await listHighlights(db, 'b'))[0]).toMatchObject({ note: null, updatedAt: 6 })
+})
+
+test('grifo guarda a cor do leitor web', async () => {
+  const db = await setup()
+  await addHighlight(db, { id: 'h', bookId: 'b', cfiRange: 'epubcfi(/6/4)', text: 'x', createdAt: 5 })
+  expect((await listHighlights(db, 'b'))[0]).toMatchObject({ color: HIGHLIGHT_COLOR, updatedAt: 5, note: null })
+})
+
+test('apagar grifo com o Drive ligado registra a exclusão', async () => {
+  const db = await setup()
+  await setDriveEnabled(db, true)
+  await addHighlight(db, { id: 'h', bookId: 'b', cfiRange: 'epubcfi(/6/4)', text: 'x', createdAt: 5 })
+  await deleteHighlight(db, 'h', 70)
+  expect(await db.getAll('SELECT * FROM deletions')).toEqual([{ key: 'highlight:h', deletedAt: 70 }])
 })

@@ -1,4 +1,13 @@
-import { byBookOrder, cfiSteps, compareCfi, containsCfi } from './cfi-order'
+import { byBookOrder, cfiSteps, compareCfi, containsCfi, showsSaved } from './cfi-order'
+
+test('a página ainda mostra a posição salva: não grava de novo', () => {
+  const page = { cfi: 'epubcfi(/6/4!/4/4/1:0)', startCfi: 'epubcfi(/6/4!/4/2/1:0)', endCfi: 'epubcfi(/6/4!/4/8/1:40)' }
+  expect(showsSaved('epubcfi(/6/4!/4/4/1:10)', page)).toBe(true)
+  expect(showsSaved('epubcfi(/6/4!/4/10/1:0)', page)).toBe(false)
+  expect(showsSaved(null, page)).toBe(false)
+  // Sem o começo, conta a âncora.
+  expect(showsSaved(page.cfi, { cfi: page.cfi, startCfi: null, endCfi: null })).toBe(true)
+})
 
 test('lê os passos de um CFI simples e de um intervalo', () => {
   expect(cfiSteps('epubcfi(/6/4[cap2]!/4/2/1:12)')).toEqual([6, 4, 4, 2, 1, 12])

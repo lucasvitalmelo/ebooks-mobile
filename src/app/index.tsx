@@ -20,8 +20,11 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { BookCard } from '@/components/BookCard'
 import { BookMenu } from '@/components/BookMenu'
 import { ContinueCard } from '@/components/ContinueCard'
+import { DriveSheet } from '@/components/DriveSheet'
 import { EditBookSheet, type EditValues } from '@/components/EditBookSheet'
 import { PdfConverter, type PdfConverterHandle } from '@/components/PdfConverter'
+import { SyncButton } from '@/components/SyncButton'
+import { SyncStrip } from '@/components/SyncStrip'
 import { editBook } from '@/lib/edit-book'
 import { toHex } from '@/lib/epub/sha256'
 import { withLibraryLock } from '@/lib/library-lock'
@@ -30,7 +33,8 @@ import { prepareLibrary } from '@/lib/prepare-library'
 import { ProtectedEpubError } from '@/lib/epub/edit'
 import { UNKNOWN_AUTHOR } from '@/lib/epub/parse'
 import { exportFileName } from '@/lib/epub/export-name'
-import { listBooksWithProgress, type BookWithProgress } from '@/lib/db/books'
+import { hasLocalFile, listBooksWithProgress, removeLocalFile, type BookWithProgress } from '@/lib/db/books'
+import { isDriveEnabled } from '@/lib/db/deletions'
 import { useDb } from '@/lib/db/provider'
 import {
   copyForExport,
@@ -47,6 +51,8 @@ import {
 import { formatSummary, importBooks, removeBook, type ImportDeps } from '@/lib/import'
 import { pickContinue } from '@/lib/library'
 import { paletteFor } from '@/lib/palette'
+import { needsDownload } from '@/lib/sync/book-file'
+import { downloadStore, syncStore, useDownloadStore, useDriveStore } from '@/store/sync'
 import { useThemeStore } from '@/store/theme-store'
 import { UI_FONT } from '@/ui/fonts'
 
@@ -68,6 +74,10 @@ export default function Library() {
   const [saving, setSaving] = useState(false)
   // A capa editada pode ficar no mesmo caminho: o contador força o Image a não usar a do cache.
   const [editCount, setEditCount] = useState(0)
+  const [driveOpen, setDriveOpen] = useState(false)
+  const [shelf, setShelf] = useState<'baixados' | 'disponiveis'>('baixados')
+  const connected = useDriveStore((s) => s.status === 'conectado')
+  const downloading = useDownloadStore((s) => s.downloading)
   const busy = useRef(false)
   const pdf = useRef<PdfConverterHandle>(null)
   // Largura fixa: a célula sozinha na última linha não estica para a linha inteira.
@@ -79,6 +89,19 @@ export default function Library() {
       void reload()
     }, [reload]),
   )
+  // A sincronização ou um download mudou algo na biblioteca.
+  useEffect(() => {
+    const unsubscribeSync = syncStore.subscribe((state, previous) => {
+      if (state.revision !== previous.revision) void reload()
+    })
+    const unsubscribeDownload = downloadStore.subscribe((state, previous) => {
+      if (state.revision !== previous.revision) void reload()
+    })
+    return () => {
+      unsubscribeSync()
+      unsubscribeDownload()
+    }
+  }, [reload])
 
   useEffect(() => {
     prepareLibrary({ db, readFile: readFileBytes, replaceFile: replaceBytes }).catch((error: unknown) =>
@@ -134,6 +157,7 @@ export default function Library() {
       )
       Alert.alert('Importação', formatSummary(summary))
       await reload()
+      void syncStore.getState().run(db)
     } catch (error) {
       console.error(error)
       ToastAndroid.show('Não foi possível importar os livros.', ToastAndroid.LONG)
@@ -163,7 +187,14 @@ export default function Library() {
         height: values.cover.height,
         type: values.cover.type,
       }
-      const editDeps = { db, readFile: readFileBytes, writeFile: writeBytes, replaceFile: replaceBytes, deleteFiles }
+      const editDeps = {
+        db,
+        readFile: readFileBytes,
+        writeFile: writeBytes,
+        replaceFile: replaceBytes,
+        deleteFiles,
+        now: Date.now,
+      }
       await withLibraryLock(() =>
         editBook(editDeps, editing, {
           title: values.title,
@@ -175,6 +206,7 @@ export default function Library() {
       setEditCount((count) => count + 1)
       ToastAndroid.show('Informações atualizadas', ToastAndroid.SHORT)
       await reload()
+      void syncStore.getState().run(db)
     } catch (error) {
       console.error(error)
       ToastAndroid.show(
@@ -188,10 +220,15 @@ export default function Library() {
     }
   }
 
-  function confirmDelete(book: BookWithProgress) {
+  async function confirmDelete(book: BookWithProgress) {
+    // O registro de exclusões, não o status do login: com o login momentaneamente
+    // fora, a exclusão ainda chega aos outros aparelhos na próxima sincronização.
+    const everywhere = await isDriveEnabled(db).catch(() => false)
     Alert.alert(
       `Remover "${book.title}"?`,
-      'O arquivo e o progresso de leitura salvo serão removidos permanentemente. Essa ação não pode ser desfeita.',
+      everywhere
+        ? 'O livro, o progresso e os grifos saem deste aparelho e dos outros aparelhos conectados ao Google Drive. Essa ação não pode ser desfeita.'
+        : 'O arquivo e o progresso de leitura salvo serão removidos permanentemente. Essa ação não pode ser desfeita.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -205,6 +242,7 @@ export default function Library() {
               ToastAndroid.show('Não foi possível remover o livro.', ToastAndroid.LONG)
             } finally {
               await reload()
+              void syncStore.getState().run(db)
             }
           },
         },
@@ -212,8 +250,34 @@ export default function Library() {
     )
   }
 
-  const current = books ? pickContinue(books) : null
-  const cells: Cell[] = books ? [...books, { id: '__add' }] : []
+  async function removeLocal(book: BookWithProgress) {
+    try {
+      await withLibraryLock(async () => {
+        await removeLocalFile(db, book.id)
+        deleteFiles([book.filePath])
+      })
+      ToastAndroid.show(`"${book.title}" removido deste aparelho`, ToastAndroid.SHORT)
+    } catch (error) {
+      console.error(error)
+      ToastAndroid.show('Não foi possível remover deste aparelho.', ToastAndroid.LONG)
+    } finally {
+      await reload()
+    }
+  }
+
+  const someInCloud = books?.some((book) => !hasLocalFile(book)) ?? false
+  const anyLocal = books?.some(hasLocalFile) ?? false
+  // Sem abas, tudo está aqui. Sem nenhum livro aqui, "Baixados" ficaria vazia: abre em "Disponíveis".
+  const effectiveShelf = !someInCloud ? 'baixados' : !anyLocal ? 'disponiveis' : shelf
+  const visible = books ? books.filter((book) => hasLocalFile(book) === (effectiveShelf === 'baixados')) : []
+  const current = books ? pickContinue(books.filter(hasLocalFile)) : null
+  const cells: Cell[] = effectiveShelf === 'baixados' && books ? [...visible, { id: '__add' }] : visible
+  const emptyShelf =
+    someInCloud && visible.length === 0
+      ? effectiveShelf === 'disponiveis'
+        ? 'Todos os livros do Google Drive já estão neste aparelho.'
+        : 'Nenhum livro baixado neste aparelho.'
+      : null
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: palette.background }]}>
@@ -227,6 +291,7 @@ export default function Library() {
             </Text>
           )}
         </Text>
+        <SyncButton palette={palette} onPress={() => setDriveOpen(true)} />
         <Pressable
           accessibilityLabel="Adicionar EPUB"
           onPress={onImport}
@@ -240,6 +305,39 @@ export default function Library() {
           {importing ? <ActivityIndicator color={palette.onPrimary} /> : <Plus size={20} color={palette.onPrimary} />}
         </Pressable>
       </View>
+      <SyncStrip palette={palette} />
+      {/* "Baixados" é o que dá para ler sem conexão; "Disponíveis", o que está no Drive para baixar. */}
+      {someInCloud && (
+        <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: palette.panel }]}>
+          {(
+            [
+              ['baixados', 'Baixados'],
+              ['disponiveis', 'Disponíveis'],
+            ] as const
+          ).map(([value, label]) => {
+            const selected = effectiveShelf === value
+            return (
+              <Pressable
+                key={value}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                onPress={() => setShelf(value)}
+                style={[styles.tab, selected && { backgroundColor: palette.background }]}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: selected ? palette.text : palette.muted },
+                    selected && styles.tabTextSelected,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
       {books?.length === 0 ? (
         <Pressable onPress={onImport} style={[styles.empty, { borderColor: palette.panelBorder }]}>
           <View style={[styles.emptyIcon, { backgroundColor: palette.panel }]}>
@@ -258,15 +356,18 @@ export default function Library() {
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.grid}
           ListHeaderComponent={
-            current ? (
+            current || emptyShelf ? (
               <View style={styles.continue}>
-                <ContinueCard
-                  book={current}
-                  coverUri={coverOf(current)}
-                  percent={current.percent}
-                  palette={palette}
-                  onPress={() => open(current)}
-                />
+                {current && (
+                  <ContinueCard
+                    book={current}
+                    coverUri={coverOf(current)}
+                    percent={current.percent}
+                    palette={palette}
+                    onPress={() => open(current)}
+                  />
+                )}
+                {emptyShelf && <Text style={[styles.emptyShelf, { color: palette.muted }]}>{emptyShelf}</Text>}
               </View>
             ) : undefined
           }
@@ -278,8 +379,11 @@ export default function Library() {
                 percent={item.percent}
                 palette={palette}
                 width={cellWidth}
+                cloud={!hasLocalFile(item)}
+                downloading={downloading.includes(item.id)}
                 onPress={() => open(item)}
                 onMenu={() => setMenuBook(item)}
+                onDownload={() => void downloadStore.getState().download(db, item)}
               />
             ) : (
               <Pressable
@@ -297,17 +401,31 @@ export default function Library() {
       <BookMenu
         title={menuBook?.title ?? null}
         palette={palette}
+        cloud={!!menuBook && !hasLocalFile(menuBook)}
+        canEdit={!!menuBook && hasLocalFile(menuBook) && !needsDownload(menuBook)}
+        canRemoveLocal={
+          !!menuBook && connected && hasLocalFile(menuBook) && !!menuBook.driveFileId && menuBook.pendingUpload === 0
+        }
         onClose={() => setMenuBook(null)}
         onEdit={() => setEditing(menuBook)}
         onExport={() => {
           const book = menuBook
           if (book) void exportBook(book)
         }}
+        onDownload={() => {
+          const book = menuBook
+          if (book) void downloadStore.getState().download(db, book)
+        }}
+        onRemoveLocal={() => {
+          const book = menuBook
+          if (book) void removeLocal(book)
+        }}
         onDelete={() => {
           const book = menuBook
-          if (book) confirmDelete(book)
+          if (book) void confirmDelete(book)
         }}
       />
+      <DriveSheet visible={driveOpen} palette={palette} onClose={() => setDriveOpen(false)} />
       <PdfConverter ref={pdf} />
       {editing && (
         <EditBookSheet
@@ -345,7 +463,12 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ translateY: 1 }] },
   grid: { paddingHorizontal: PADDING, paddingBottom: 24, gap: 24 },
   row: { gap: COLUMN_GAP },
-  continue: { marginBottom: 0 },
+  continue: { marginBottom: 0, gap: 24 },
+  tabs: { flexDirection: 'row', gap: 4, padding: 4, marginHorizontal: 16, marginBottom: 16, borderRadius: 10 },
+  tab: { flex: 1, minHeight: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  tabText: { fontSize: 14, fontFamily: UI_FONT.regular },
+  tabTextSelected: { fontFamily: UI_FONT.medium },
+  emptyShelf: { fontSize: 14, fontFamily: UI_FONT.regular },
   addTile: {
     aspectRatio: 2 / 3,
     borderRadius: 10,

@@ -11,6 +11,7 @@ export interface EditDeps {
   // Troca o arquivo inteiro de uma vez: nunca deixa um livro pela metade no lugar do original.
   replaceFile(path: string, bytes: Uint8Array): Promise<void>
   deleteFiles(paths: (string | null)[]): void
+  now(): number
 }
 
 // O ID do livro não muda: ele liga progresso e grifos, e o leitor web faz igual.
@@ -45,7 +46,7 @@ export async function editBook(deps: EditDeps, book: Book, edits: BookInfoEdits)
     throw error
   }
   try {
-    await updateBookInfo(deps.db, book.id, { title: parsed.title, author: parsed.author, coverPath })
+    await updateBookInfo(deps.db, book.id, { title: parsed.title, author: parsed.author, coverPath }, deps.now())
   } catch (error) {
     await deps.replaceFile(book.filePath, original).catch(logRestore)
     await undoCover()

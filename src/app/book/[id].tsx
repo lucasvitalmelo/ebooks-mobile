@@ -27,14 +27,22 @@ import { ReturnPill } from '@/components/ReturnPill'
 import { SearchSheet, type SearchState } from '@/components/SearchSheet'
 import { SelectionPopover } from '@/components/SelectionPopover'
 import { getBook, markOpened, saveLocations, setFontScale, type Book } from '@/lib/db/books'
-import { addHighlight, deleteHighlight, listHighlights, setHighlightNote, type Highlight } from '@/lib/db/highlights'
+import {
+  addHighlight,
+  deleteHighlight,
+  HIGHLIGHT_COLOR,
+  listHighlights,
+  setHighlightNote,
+  type Highlight,
+} from '@/lib/db/highlights'
 import { getProgress, saveProgress } from '@/lib/db/progress'
 import { useDb } from '@/lib/db/provider'
 import { toReaderTheme } from '@/lib/db/themes'
 import { readBase64 } from '@/lib/files'
 import { paletteFor } from '@/lib/palette'
+import { BookNotHereError, ensureBookFile, needsDownload } from '@/lib/sync/book-file'
 import { shouldHideBar } from '@/reader/bar'
-import { byBookOrder, containsCfi } from '@/reader/cfi-order'
+import { byBookOrder, containsCfi, showsSaved } from '@/reader/cfi-order'
 import {
   IDLE_CHECKPOINT,
   savedOrigin,
@@ -45,6 +53,7 @@ import {
 import type { Rect } from '@/reader/hit'
 import type { ReaderEvent } from '@/reader/protocol'
 import { currentEntry, type TocEntry } from '@/reader/toc'
+import { bookFileDeps, downloadStore, syncStore } from '@/store/sync'
 import { themeStore, useThemeStore } from '@/store/theme-store'
 import { UI_FONT } from '@/ui/fonts'
 
@@ -106,6 +115,7 @@ export default function BookScreen() {
   const checkpointRef = useRef<CheckpointState>(IDLE_CHECKPOINT)
   const position = useRef<Position | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loadingText, setLoadingText] = useState<string | null>(null)
   const pending = useRef<{ cfi: string; percent: number | null } | null>(null)
   // A porcentagem só existe depois das locations; um relocated sem ela não
   // pode apagar a que já se sabia.
@@ -113,6 +123,9 @@ export default function BookScreen() {
   // O CFI do último relocated; o mesmo CFI de novo (o reenvio quando as
   // locations ficam prontas) não é movimento.
   const lastCfi = useRef<string | null>(null)
+  // A posição gravada (ou a que vai ser): enquanto a página a mostra, não grava de novo.
+  const savedCfi = useRef<string | null>(null)
+  const savedPercent = useRef<number | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
@@ -145,6 +158,8 @@ export default function BookScreen() {
   // app dentro de uma nota reabre onde se lia (como no leitor web).
   const queueSave = useCallback(
     (current: Position) => {
+      savedCfi.current = current.cfi
+      savedPercent.current = lastPercent.current
       const origin = savedOrigin(checkpointRef.current)
       pending.current = origin
         ? { cfi: origin.cfi, percent: origin.percentage ?? lastPercent.current }
@@ -205,9 +220,10 @@ export default function BookScreen() {
     })
     return () => {
       subscription.remove()
-      void save()
+      // Ao sair do livro, o progresso e os grifos sobem.
+      void save().finally(() => void syncStore.getState().run(db))
     }
-  }, [save])
+  }, [save, db])
 
   // Com um ponto de retorno, o voltar do Android volta para onde se lia em vez de sair do livro.
   useEffect(() => {
@@ -231,12 +247,26 @@ export default function BookScreen() {
       const found = await getBook(db, id)
       if (!found) return setError('Livro não encontrado.')
       setBook(found)
+      if (needsDownload(found)) setLoadingText('Baixando o livro do Google Drive…')
+      try {
+        // O mesmo download do botão de baixar, se ele já estiver em andamento.
+        await ensureBookFile(bookFileDeps(db), found, (book) => downloadStore.getState().ensure(db, book))
+      } catch (e) {
+        if (e instanceof BookNotHereError) {
+          return setError('Este livro está no Google Drive. Conecte-se à internet para baixá-lo.')
+        }
+        throw e
+      } finally {
+        setLoadingText(null)
+      }
       const [progress, base64, rows] = await Promise.all([
         getProgress(db, id),
         readBase64(found.filePath),
         listHighlights(db, id),
       ])
       lastPercent.current = progress?.percent ?? null
+      savedCfi.current = progress?.cfi ?? null
+      savedPercent.current = progress?.percent ?? null
       setPercent(lastPercent.current)
       setHighlights(rows)
       reader.current?.send({ type: 'setTheme', theme: toReaderTheme(themeStore.getState().active) })
@@ -261,7 +291,7 @@ export default function BookScreen() {
 
   const removeHighlight = useCallback(
     (highlight: Highlight) =>
-      deleteHighlight(db, highlight.id)
+      deleteHighlight(db, highlight.id, Date.now())
         .then(() => {
           reader.current?.send({ type: 'removeHighlight', id: highlight.id })
           setHighlights((current) => current.filter((h) => h.id !== highlight.id))
@@ -291,7 +321,10 @@ export default function BookScreen() {
           }
           setPercent(lastPercent.current)
           if (checkpointRef.current.status !== 'idle') dispatch({ type: 'relocated', showsOrigin: showsOrigin() })
-          queueSave(position.current)
+          // Grava de novo na mesma página só quando a porcentagem passou a existir
+          // (as locations ficaram prontas depois), como o web.
+          const percentArrived = savedPercent.current === null && lastPercent.current !== null
+          if (!showsSaved(savedCfi.current, position.current) || percentArrived) queueSave(position.current)
           return
         }
         case 'linkJump':
@@ -346,6 +379,7 @@ export default function BookScreen() {
       bookId: id,
       cfiRange: current.cfiRange,
       text: current.text,
+      color: HIGHLIGHT_COLOR,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       note: null,
@@ -460,6 +494,11 @@ export default function BookScreen() {
       </Animated.View>
       <View style={styles.reader} onLayout={onReaderLayout}>
         <Reader ref={reader} background={theme.background} onEvent={onEvent} />
+        {loadingText && (
+          <View pointerEvents="none" style={styles.loading}>
+            <Text style={[styles.loadingText, { color: palette.muted }]}>{loadingText}</Text>
+          </View>
+        )}
         {popover && (
           <SelectionPopover
             mode={popover.mode}
@@ -552,6 +591,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
   errorText: { textAlign: 'center', fontFamily: UI_FONT.regular },
+  loading: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  loadingText: { textAlign: 'center', fontSize: 14, fontFamily: UI_FONT.regular },
   textButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   textButtonLabel: { fontFamily: UI_FONT.medium },
   header: {

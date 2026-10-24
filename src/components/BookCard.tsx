@@ -1,5 +1,5 @@
-import { EllipsisVertical } from 'lucide-react-native'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Download, EllipsisVertical } from 'lucide-react-native'
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import type { Palette } from '@/lib/palette'
 import { UI_FONT } from '@/ui/fonts'
 import { ProgressBar } from './ProgressBar'
@@ -11,30 +11,62 @@ interface Props {
   palette: Palette
   // Largura fixa da célula: com `flex: 1`, um card sozinho na última linha esticaria.
   width: number
+  // Só no Google Drive: o arquivo não está neste aparelho.
+  cloud: boolean
+  downloading: boolean
   onPress(): void
   onMenu(): void
+  onDownload(): void
 }
 
-export function BookCard({ book, coverUri, percent, palette, width, onPress, onMenu }: Props) {
+export function BookCard({
+  book,
+  coverUri,
+  percent,
+  palette,
+  width,
+  cloud,
+  downloading,
+  onPress,
+  onMenu,
+  onDownload,
+}: Props) {
   return (
     <View style={[styles.card, { width }]}>
-      <Pressable accessibilityLabel={book.title} onPress={onPress}>
-        {coverUri ? (
-          <Image
-            source={{ uri: coverUri }}
-            style={[styles.cover, { borderColor: palette.border, backgroundColor: palette.panel }]}
-            resizeMode="cover"
-          />
-        ) : (
-          <View
-            style={[styles.cover, styles.placeholder, { borderColor: palette.border, backgroundColor: palette.panel }]}
+      <View>
+        <Pressable accessibilityLabel={book.title} onPress={onPress} style={cloud && styles.faded}>
+          {coverUri ? (
+            <Image
+              source={{ uri: coverUri }}
+              style={[styles.cover, { borderColor: palette.border, backgroundColor: palette.panel }]}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={[
+                styles.cover,
+                styles.placeholder,
+                { borderColor: palette.border, backgroundColor: palette.panel },
+              ]}
+            >
+              <Text style={[styles.placeholderTitle, { color: palette.muted }]} numberOfLines={4}>
+                {book.title}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+        {cloud && (
+          <Pressable
+            accessibilityLabel="Baixar"
+            onPress={onDownload}
+            disabled={downloading}
+            hitSlop={4}
+            style={[styles.download, { backgroundColor: palette.panel }]}
           >
-            <Text style={[styles.placeholderTitle, { color: palette.muted }]} numberOfLines={4}>
-              {book.title}
-            </Text>
-          </View>
+            {downloading ? <ActivityIndicator color={palette.text} /> : <Download size={18} color={palette.text} />}
+          </Pressable>
         )}
-      </Pressable>
+      </View>
       {/* Invisível em 0%: o título fica na mesma altura em todos os cards. */}
       <View style={[styles.progress, !percent && styles.hidden]}>
         <ProgressBar value={percent} palette={palette} width="100%" />
@@ -60,6 +92,17 @@ const styles = StyleSheet.create({
   card: { gap: 8 },
   cover: { aspectRatio: 2 / 3, width: '100%', borderRadius: 10, borderWidth: 1 },
   placeholder: { justifyContent: 'center', padding: 8 },
+  faded: { opacity: 0.55 },
+  download: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   placeholderTitle: { textAlign: 'center', fontSize: 14, fontFamily: UI_FONT.medium },
   progress: { marginTop: -2 },
   hidden: { opacity: 0 },

@@ -73,6 +73,16 @@ test('não importa duas vezes o mesmo livro', async () => {
   expect(await listBooks(db)).toHaveLength(1)
 })
 
+test('reimportar um livro que só está no Drive guarda o arquivo aqui', async () => {
+  const { db, deps } = await setup()
+  await importBooks(deps, [{ uri: FIXTURE, name: 'livro.epub' }])
+  const [book] = await listBooks(db)
+  await db.run("UPDATE books SET blobUpdatedAt = NULL, driveFileId = 'f', pendingUpload = 0 WHERE id = ?", [book.id])
+  const summary = await importBooks(deps, [{ uri: FIXTURE, name: 'livro.epub' }])
+  expect(summary.imported).toHaveLength(1)
+  expect((await getBook(db, book.id))?.blobUpdatedAt).toBe(book.fileUpdatedAt)
+})
+
 test('arquivo inválido entra no resumo com o motivo e não para os outros', async () => {
   const { db, deps } = await setup()
   const summary = await importBooks(deps, [

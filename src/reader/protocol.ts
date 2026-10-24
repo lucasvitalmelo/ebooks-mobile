@@ -1,5 +1,6 @@
 import { isFontId } from './fonts'
 import type { Rect } from './hit'
+import type { SearchResult } from './search-text'
 import type { ReaderTheme } from './theme'
 
 import type { TocEntry } from './toc'
@@ -19,6 +20,7 @@ export type Command =
   | { type: 'addHighlight'; id: string; cfiRange: string }
   | { type: 'removeHighlight'; id: string }
   | { type: 'clearSelection' }
+  | { type: 'search'; id: number; query: string }
 
 export type ReaderEvent =
   | { type: 'ready' }
@@ -39,6 +41,7 @@ export type ReaderEvent =
   | { type: 'highlightTap'; id: string; rect: Rect }
   | { type: 'linkJump' }
   | { type: 'jumpEnded'; ok: boolean }
+  | { type: 'searchResults'; id: number; results: SearchResult[] }
   | { type: 'error'; message: string }
 
 type Fields = Record<string, unknown>
@@ -107,7 +110,14 @@ const arrayOf =
   (value: unknown): value is T[] =>
     Array.isArray(value) && value.every(check)
 
+function isSearchResult(value: unknown): value is SearchResult {
+  if (!value || typeof value !== 'object') return false
+  const r = value as Fields
+  return isString(r.cfi) && isString(r.excerpt) && isNullableString(r.chapterLabel)
+}
+
 const isHighlightRefs = arrayOf(isHighlightRef)
+const isSearchResults = arrayOf(isSearchResult)
 const isTocEntries = arrayOf(isTocEntry)
 
 export function parseCommand(raw: string): Command | null {
@@ -139,6 +149,8 @@ export function parseCommand(raw: string): Command | null {
       return isFilled(m.id) && isFilled(m.cfiRange) ? { type: 'addHighlight', id: m.id, cfiRange: m.cfiRange } : null
     case 'removeHighlight':
       return isFilled(m.id) ? { type: 'removeHighlight', id: m.id } : null
+    case 'search':
+      return isInteger(m.id) && isString(m.query) ? { type: 'search', id: m.id, query: m.query } : null
     default:
       return null
   }
@@ -176,6 +188,14 @@ export function parseEvent(raw: string): ReaderEvent | null {
         : null
     case 'highlightTap':
       return isFilled(m.id) && isRect(m.rect) ? { type: 'highlightTap', id: m.id, rect: pickRect(m.rect) } : null
+    case 'searchResults':
+      return isInteger(m.id) && isSearchResults(m.results)
+        ? {
+            type: 'searchResults',
+            id: m.id,
+            results: m.results.map(({ cfi, excerpt, chapterLabel }) => ({ cfi, excerpt, chapterLabel })),
+          }
+        : null
     case 'error':
       return isString(m.message) ? { type: 'error', message: m.message } : null
     default:

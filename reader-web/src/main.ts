@@ -1,11 +1,13 @@
 import ePub, { EpubCFI, type Book, type Contents, type Location, type Rendition } from 'epubjs'
+import type Section from 'epubjs/types/section'
 import { classifyGesture, type Gesture } from '../../src/reader/gestures'
 import { hitHighlight, type Rect } from '../../src/reader/hit'
 import { resolveLink } from '../../src/reader/links'
 import { Assembler, parseCommand, type Command, type HighlightRef, type ReaderEvent } from '../../src/reader/protocol'
+import type { SearchResult } from '../../src/reader/search-text'
 import type { ReaderTheme } from '../../src/reader/theme'
 import { themeCss } from '../../src/reader/theme-css'
-import { flattenToc } from '../../src/reader/toc'
+import { currentEntry, flattenToc, type TocEntry } from '../../src/reader/toc'
 import fontsCss from './fonts.css?inline'
 
 declare global {
@@ -19,6 +21,7 @@ const LOCATION_CHARS = 1024
 // Uma fonte que não carrega não pode segurar o posicionamento para sempre.
 const FONTS_TIMEOUT_MS = 3000
 const SETTLE_MAX_ATTEMPTS = 3
+const MAX_SEARCH_RESULTS = 200
 const viewer = document.getElementById('viewer')!
 
 let book: Book | null = null
@@ -26,6 +29,11 @@ let rendition: Rendition | null = null
 let locationsReady = false
 let theme: ReaderTheme | null = null
 let canPage = false
+let currentBuffer: ArrayBuffer | null = null
+let searchBook: Book | null = null
+let searchRequest = 0
+let searching: Promise<void> = Promise.resolve()
+let tocEntries: TocEntry[] = []
 // A posição que o leitor escolheu: a restaurada, a de um goTo ou a página para
 // onde ele virou. Fontes que chegam depois (font-display: swap) e mudanças de
 // tema refazem o layout e mudam onde a página começa sem o leitor sair dela;
@@ -353,6 +361,10 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
   highlights.clear()
   selectionSent = false
   const buffer = base64ToArrayBuffer(base64)
+  currentBuffer = buffer
+  tocEntries = []
+  searchBook?.destroy()
+  searchBook = null
   const opened = ePub(buffer)
   book = opened
   try {
@@ -449,7 +461,10 @@ async function open(base64: string, cfi: string | null, savedLocations: string |
   anchor ??= currentLocationOf(current)?.start?.cfi ?? null
   if (anchor) sendPosition(anchor)
   opened.loaded.navigation
-    .then((navigation) => send({ type: 'toc', entries: flattenToc(navigation.toc) }))
+    .then((navigation) => {
+      tocEntries = flattenToc(navigation.toc)
+      send({ type: 'toc', entries: tocEntries })
+    })
     .catch((error: unknown) => {
       console.error('Sumário ilegível', error)
       send({ type: 'toc', entries: [] })
@@ -481,6 +496,58 @@ async function goTo(target: string) {
   send({ type: 'jumpEnded', ok: true })
 }
 
+// Uma busca de cada vez: uma busca substituída para no próximo capítulo, e o
+// `unload` dela não pode cair no capítulo que a busca nova acabou de carregar.
+function search(id: number, query: string): Promise<void> {
+  searchRequest = id
+  searching = searching.then(() => runSearch(id, query)).catch((error: unknown) => console.error('Busca falhou', error))
+  return searching
+}
+
+// Num Book separado, como no leitor web: carregar e descarregar os capítulos do
+// Book que renderiza quebraria a página na tela.
+async function runSearch(id: number, query: string) {
+  if (searchRequest !== id) return
+  const text = query.trim()
+  // Busca vazia: a folha fechou (ou o texto ficou curto); o Book da busca sai da memória.
+  if (!text) {
+    searchBook?.destroy()
+    searchBook = null
+    return
+  }
+  const results: SearchResult[] = []
+  if (!currentBuffer || text.length < 3) return send({ type: 'searchResults', id, results })
+  if (!searchBook) {
+    // O JSZip só lê o ArrayBuffer (não o transfere): o mesmo do Book que renderiza serve.
+    const created = ePub(currentBuffer)
+    await created.ready
+    if (searchRequest !== id) return created.destroy()
+    searchBook = created
+  }
+  const target = searchBook
+  const sections: Section[] = []
+  target.spine.each((section: Section) => sections.push(section))
+  for (const section of sections) {
+    if (searchRequest !== id || searchBook !== target || results.length >= MAX_SEARCH_RESULTS) break
+    try {
+      await section.load(target.load.bind(target))
+      if (searchRequest !== id) break
+      const entry = tocEntries[currentEntry(tocEntries, section.href)]
+      // search() existe no epub.js 0.3.93, mas não nos .d.ts.
+      const hits = (section as unknown as { search(q: string): { cfi: string; excerpt: string }[] }).search(text)
+      for (const hit of hits) {
+        results.push({ cfi: hit.cfi, excerpt: hit.excerpt.trim(), chapterLabel: entry?.label ?? null })
+        if (results.length >= MAX_SEARCH_RESULTS) break
+      }
+    } catch (error) {
+      console.error('Busca falhou num capítulo', error)
+    } finally {
+      section.unload()
+    }
+  }
+  if (searchRequest === id) send({ type: 'searchResults', id, results })
+}
+
 async function handle(command: Command) {
   switch (command.type) {
     case 'open':
@@ -505,6 +572,8 @@ async function handle(command: Command) {
     }
     case 'clearSelection':
       return clearSelection()
+    case 'search':
+      return search(command.id, command.query)
   }
 }
 

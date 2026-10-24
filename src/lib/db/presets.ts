@@ -25,6 +25,16 @@ export const PRESET_THEMES: Theme[] = [
   },
   {
     ...BASE,
+    id: 'preset-preto',
+    name: 'Preto',
+    background: '#000000',
+    text: '#d4d4d8',
+    link: '#93c5fd',
+    fontFamily: 'nunito',
+    lineHeight: 1.6,
+  },
+  {
+    ...BASE,
     id: 'preset-sepia',
     name: 'Sépia',
     background: '#f4ecd8',

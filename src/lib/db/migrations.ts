@@ -38,7 +38,7 @@ const MIGRATIONS: ((db: Db) => Promise<void>)[] = [
         value TEXT NOT NULL
       );
     `)
-    for (const t of PRESET_THEMES) {
+    for (const t of PRESET_THEMES.filter((preset) => preset.id !== 'preset-preto')) {
       await db.run(
         'INSERT INTO themes (id, name, background, text, link, fontFamily, fontSize, lineHeight, margin, builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
         [t.id, t.name, t.background, t.text, t.link, t.fontFamily, t.fontSize, t.lineHeight, t.margin],
@@ -57,6 +57,25 @@ const MIGRATIONS: ((db: Db) => Promise<void>)[] = [
       );
       CREATE INDEX highlights_book ON highlights(bookId);
     `)
+  },
+  async (db) => {
+    await db.exec('ALTER TABLE highlights ADD COLUMN note TEXT')
+    const preto = PRESET_THEMES.find((t) => t.id === 'preset-preto')!
+    await db.run(
+      `INSERT OR IGNORE INTO themes (id, name, background, text, link, fontFamily, fontSize, lineHeight, margin, builtin)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        preto.id,
+        preto.name,
+        preto.background,
+        preto.text,
+        preto.link,
+        preto.fontFamily,
+        preto.fontSize,
+        preto.lineHeight,
+        preto.margin,
+      ],
+    )
   },
 ]
 

@@ -31,6 +31,41 @@ export async function storeCover(id: string, bytes: Uint8Array, extension: strin
   await file.write(bytes)
 }
 
+export async function writeBytes(relativePath: string, bytes: Uint8Array): Promise<void> {
+  const file = fileAt(relativePath)
+  file.create({ overwrite: true, intermediates: true })
+  await file.write(bytes)
+}
+
+// Escreve ao lado e só então troca: o `create` com overwrite trunca o arquivo, e
+// uma falha no meio da escrita deixaria o livro pela metade no lugar do original.
+export async function replaceBytes(relativePath: string, bytes: Uint8Array): Promise<void> {
+  const temporary = fileAt(`${relativePath}.tmp`)
+  temporary.create({ overwrite: true, intermediates: true })
+  try {
+    await temporary.write(bytes)
+    await temporary.move(fileAt(relativePath), { overwrite: true })
+  } catch (error) {
+    deleteQuietly(temporary)
+    throw error
+  }
+}
+
+export function readFileBytes(relativePath: string): Promise<Uint8Array> {
+  return fileAt(relativePath).bytes()
+}
+
+// Uma cópia no cache com o nome de exportação: o compartilhamento usa o nome do
+// arquivo. A pasta é esvaziada a cada exportação para as cópias não se acumularem.
+export async function copyForExport(relativePath: string, name: string): Promise<string> {
+  const folder = new Directory(Paths.cache, 'export')
+  if (folder.exists) folder.delete()
+  folder.create({ idempotent: true, intermediates: true })
+  const target = new File(folder, name)
+  await fileAt(relativePath).copy(target)
+  return target.uri
+}
+
 function deleteQuietly(file: File) {
   try {
     if (file.exists) file.delete()

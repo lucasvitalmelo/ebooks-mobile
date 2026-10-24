@@ -1,6 +1,7 @@
 import type { ReaderTheme } from '@/reader/theme'
 import type { FontId } from '@/reader/fonts'
 import type { Db } from './db'
+import { PRESET_THEMES } from './presets'
 
 export interface Theme extends ReaderTheme {
   id: string
@@ -16,7 +17,16 @@ function fromRow(row: ThemeRow): Theme {
 
 export async function listThemes(db: Db): Promise<Theme[]> {
   const rows = await db.getAll<ThemeRow>('SELECT * FROM themes ORDER BY builtin DESC, rowid')
-  return rows.map(fromRow)
+  // Os prontos na ordem de PRESET_THEMES: um pronto novo (o Preto, na migração 3)
+  // entra no banco depois dos outros, mas tem lugar certo na lista.
+  const presetIndex = (row: ThemeRow) => {
+    const index = PRESET_THEMES.findIndex((preset) => preset.id === row.id)
+    return row.builtin && index >= 0 ? index : PRESET_THEMES.length
+  }
+  return rows
+    .map((row, rowOrder) => ({ row, rowOrder }))
+    .sort((a, b) => presetIndex(a.row) - presetIndex(b.row) || a.rowOrder - b.rowOrder)
+    .map(({ row }) => fromRow(row))
 }
 
 export async function getTheme(db: Db, id: string): Promise<Theme | null> {

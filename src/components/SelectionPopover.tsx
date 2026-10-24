@@ -1,10 +1,10 @@
-import { Copy, Highlighter, Trash2 } from 'lucide-react-native'
+import { Copy, Highlighter, NotebookPen, Trash2 } from 'lucide-react-native'
 import { Pressable, StyleSheet, View } from 'react-native'
 import type { Palette } from '@/lib/palette'
 import { HANDLE_ROOM, placePopover } from '@/reader/popover-position'
 import type { Rect } from '@/reader/hit'
 
-export const POPOVER_SIZE = { width: 116, height: 62 }
+export const POPOVER_SIZE = { width: 166, height: 62 }
 
 interface Props {
   mode: 'selection' | 'highlight'
@@ -13,10 +13,11 @@ interface Props {
   palette: Palette
   onCopy(): void
   onHighlight(): void
+  onNote(): void
   onRemove(): void
 }
 
-export function SelectionPopover({ mode, rect, viewport, palette, onCopy, onHighlight, onRemove }: Props) {
+export function SelectionPopover({ mode, rect, viewport, palette, onCopy, onHighlight, onNote, onRemove }: Props) {
   // As alças do sistema só existem numa seleção; no toque num grifo o cartão fica colado ao trecho.
   const { top, left } = placePopover(rect, POPOVER_SIZE, viewport, mode === 'selection' ? HANDLE_ROOM : 0)
   const outline = [styles.button, { borderColor: palette.panelBorder }]
@@ -26,17 +27,27 @@ export function SelectionPopover({ mode, rect, viewport, palette, onCopy, onHigh
         <Copy size={20} color={palette.text} />
       </Pressable>
       {mode === 'selection' ? (
-        <Pressable
-          accessibilityLabel="Grifar"
-          onPress={onHighlight}
-          style={[styles.button, { backgroundColor: palette.primary, borderColor: palette.primary }]}
-        >
-          <Highlighter size={20} color={palette.onPrimary} />
-        </Pressable>
+        <>
+          <Pressable
+            accessibilityLabel="Grifar"
+            onPress={onHighlight}
+            style={[styles.button, { backgroundColor: palette.primary, borderColor: palette.primary }]}
+          >
+            <Highlighter size={20} color={palette.onPrimary} />
+          </Pressable>
+          <Pressable accessibilityLabel="Grifar com nota" onPress={onNote} style={outline}>
+            <NotebookPen size={20} color={palette.text} />
+          </Pressable>
+        </>
       ) : (
-        <Pressable accessibilityLabel="Remover grifo" onPress={onRemove} style={outline}>
-          <Trash2 size={20} color={palette.text} />
-        </Pressable>
+        <>
+          <Pressable accessibilityLabel="Nota" onPress={onNote} style={outline}>
+            <NotebookPen size={20} color={palette.text} />
+          </Pressable>
+          <Pressable accessibilityLabel="Remover grifo" onPress={onRemove} style={outline}>
+            <Trash2 size={20} color={palette.text} />
+          </Pressable>
+        </>
       )}
     </View>
   )

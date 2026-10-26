@@ -16,7 +16,66 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.lucasvitalmelo.ebooks"
+      "package": "com.lucasvitalmelo.ebooks",
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "application/octet-stream"
+            }
+          ]
+        },
+        {
+          "action": "SEND_MULTIPLE",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "application/octet-stream"
+            }
+          ]
+        },
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "content"
+            },
+            {
+              "scheme": "file"
+            },
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "application/octet-stream"
+            }
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

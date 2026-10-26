@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.7.1...v0.8.0) (2026-10-26)
+
+
+### Funcionalidades
+
+* **library:** importa livros compartilhados ou abertos com o app ([cfcb42c](https://github.com/lucasvitalmelo/ebooks-mobile/commit/cfcb42c12e65264ed0031290466ca94173e130ea))
+* **share:** módulo nativo que recebe arquivos compartilhados ([69740f9](https://github.com/lucasvitalmelo/ebooks-mobile/commit/69740f969a385cc9b1daa09572c7d7449451da56))
+
+
+### Documentação
+
+* registra o compartilhamento de arquivos com o app ([e7b70ab](https://github.com/lucasvitalmelo/ebooks-mobile/commit/e7b70abab74e9a04e7310e87e4e5cc0659d3c57c))
+
 ## [0.7.1](https://github.com/lucasvitalmelo/ebooks-mobile/compare/v0.7.0...v0.7.1) (2026-10-24)
 
 

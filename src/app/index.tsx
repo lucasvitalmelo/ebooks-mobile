@@ -4,7 +4,7 @@ import { File } from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import { router, useFocusEffect } from 'expo-router'
 import { Plus, Settings } from 'lucide-react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -49,13 +49,15 @@ import {
   storeCover,
   writeBytes,
 } from '@/lib/files'
-import { formatSummary, importBooks, removeBook, type ImportDeps } from '@/lib/import'
+import { formatSummary, importBooks, removeBook, type ImportDeps, type ImportSummary } from '@/lib/import'
 import { libraryBooks, pickContinue } from '@/lib/library'
 import { paletteFor } from '@/lib/palette'
+import { importShared } from '@/lib/shared'
 import { needsDownload } from '@/lib/sync/book-file'
 import { downloadStore, syncStore, useDownloadStore, useDriveStore } from '@/store/sync'
 import { useThemeStore } from '@/store/theme-store'
 import { UI_FONT } from '@/ui/fonts'
+import ShareIntent, { type SharedFile } from '../../modules/share-intent'
 
 const TOAST_INTERVAL = 2500
 const FIXED_MODIFIED = '2000-01-01T00:00:00Z'
@@ -82,7 +84,7 @@ export default function Library() {
   const connected = driveStatus === 'conectado'
   const books = stored && libraryBooks(stored, driveStatus)
   const downloading = useDownloadStore((s) => s.downloading)
-  const busy = useRef(false)
+  const running = useRef(0)
   const pdf = useRef<PdfConverterHandle>(null)
   // Largura fixa: a célula sozinha na última linha não estica para a linha inteira.
   const cellWidth = (useWindowDimensions().width - PADDING * 2 - COLUMN_GAP) / 2
@@ -145,31 +147,61 @@ export default function Library() {
 
   async function onImport() {
     // O Android recusa um segundo seletor aberto: a trava vale já no toque, não só depois da escolha.
-    if (busy.current) return
-    busy.current = true
-    setImporting(true)
-    try {
+    if (running.current) return
+    await runImport(async () => {
       // Filtro aberto: no Android vários provedores informam EPUB como
       // application/octet-stream, e o filtro por tipo esconderia o arquivo.
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: true })
-      if (result.canceled) return
-      const summary = await withLibraryLock(() =>
+      if (result.canceled) return null
+      return withLibraryLock(() =>
         importBooks(
           deps,
           result.assets.map((asset) => ({ uri: asset.uri, name: asset.name })),
         ),
       )
+    })
+  }
+
+  // Um contador, não um booleano: um arquivo compartilhado pode chegar durante outra importação.
+  async function runImport(collect: () => Promise<ImportSummary | null>) {
+    running.current++
+    setImporting(true)
+    try {
+      const summary = await collect()
+      if (!summary) return
       Alert.alert('Importação', formatSummary(summary))
       await reload()
       void syncStore.getState().run(db)
     } catch (error) {
-      console.error(error)
-      ToastAndroid.show('Não foi possível importar os livros.', ToastAndroid.LONG)
+      importFailed(error)
     } finally {
-      busy.current = false
-      setImporting(false)
+      if (--running.current === 0) setImporting(false)
     }
   }
+
+  function importFailed(error: unknown) {
+    console.error(error)
+    ToastAndroid.show('Não foi possível importar os livros.', ToastAndroid.LONG)
+  }
+
+  // Arquivos compartilhados com o app ou abertos com ele. A fila é lida fora do
+  // runImport para o botão não piscar o spinner a cada abertura sem arquivo.
+  const receiveShared = useEffectEvent(async () => {
+    if (!ShareIntent) return
+    let files: SharedFile[]
+    try {
+      files = await ShareIntent.consume()
+    } catch (error) {
+      return importFailed(error)
+    }
+    if (files.length) await runImport(() => withLibraryLock(() => importShared(deps, files)))
+  })
+  useEffect(() => {
+    if (!ShareIntent) return
+    const subscription = ShareIntent.addListener('onShare', () => void receiveShared())
+    void receiveShared()
+    return () => subscription.remove()
+  }, [])
 
   async function exportBook(book: BookWithProgress) {
     try {
